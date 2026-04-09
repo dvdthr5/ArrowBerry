@@ -1,5 +1,5 @@
-import TabNavigator from './navigation/TabNavigator';
+import { Stack } from 'expo-router';
 
 export default function RootLayout() {
-  return <TabNavigator />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
