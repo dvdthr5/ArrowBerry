@@ -52,7 +52,37 @@ export default function ScannerScreen() {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: "Extract the food items and their quantities from this receipt. Return ONLY a valid JSON array of objects with keys 'item_name' and 'quantity'. Do not include markdown formatting." },
+                            {
+                text: `Carefully analyze this receipt image and extract all visible receipt data.
+
+                        Important rules:
+                        1. Extract every item shown on the receipt.
+                        2. Detect quantities from indicators such as "2 x", "QTY 2", weights, or numbers before item names.
+                        3. For each item, use the line total price, not the unit price.
+                        4. Do not invent missing values.
+                        5. If a field is missing or unreadable, omit it.
+                        6. Return only valid JSON. Do not include markdown.
+
+                        Use this JSON structure:
+                        {
+                          "receiptId": "string",
+                          "merchantName": "string",
+                          "customerName": "string",
+                          "date": "yyyy-MM-dd",
+                          "tax": number,
+                          "discount": number,
+                          "total": number,
+                          "paymentMethod": "cash | creditCard | debitCard | eMoney",
+                          "currency": "3-letter currency code",
+                          "items": [
+                            {
+                              "name": "string",
+                              "price": number,
+                              "quantity": number
+                            }
+                          ]
+                        }`
+              },
               { inline_data: { mime_type: "image/jpeg", data: base64Image } }
             ]
           }]
@@ -65,15 +95,38 @@ export default function ScannerScreen() {
         throw new Error(data.error.message);
 
       }
-      const textOutput = data.candidates[0].content.parts[0].text.trim(); //trim whitespace from item_name
-      const items = JSON.parse(textOutput); //parse the json
-      setParsedItems(items);
+      const textOutput = data.candidates?.[0]?.contents?.parts?.[0]?.text ?? '';
+      const cleanedOutput = textOutput.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
+      
+      const normalizeWhitespace = (value) => {
+        if (typeof value !== 'string') {
+          return value;
+        }
+        return value.replace(/\s+/g, '').trim();
+      };
 
-  
-      let generatedCsv = "Item,Quantity\n"; //format
-      items.forEach(item => {
-        generatedCsv += `${item.item_name},${item.quantity}\n`;
-      });
+      const parsedReceipt = JSON.parse(cleanedOutput);
+      const reciptItems = Array.isArray(parsedReceipt.items) ? parsedReceipt.items : [];
+      const normalizedItems = reciptItems.map((item) => ({
+        item_name: normalizeWhitespace(item.name ?? ''),
+        quantity: normalizeWhitespace(String(item.quantity ?? '')),
+        price: normalizeWhitespace(String(item.price ?? '')),
+        receipt_id: normalizeWhitespace(parsedReceipt.receiptId ?? ''),
+        merchant_name: normalizeWhitespace(parsedReceipt.merchantName ?? ''),
+        customer_name: normalizeWhitespace(parsedReceipt.customerName ?? ''),
+        receipt_date: normalizeWhitespace(parsedReceipt.date ?? ''),
+        tax: normalizeWhitespace(String(parsedReceipt.tax ?? '')),
+        discount: normalizeWhitespace(String(parsedReceipt.discount ?? '')),
+        total: normalizeWhitespace(String(parsedReceipt.total ?? '')),
+        payment_method: normalizeWhitespace(parsedReceipt.paymentMethod ?? 'cash'),
+        currency: (normalizeWhitespace(parsedReceipt.currency ?? '')),
+        raw_receipt_json: cleanedOutput, 
+      })).filter((item) => item.item_name.length > 0);
+
+      setParsedItems(normalizedItems);
+      let generatedCsv = "Item,Quantity,Price\n";
+      generatedCsv += `${item.item_name},${item.quantity},${item.price}\n`;
+
       setCsvData(generatedCsv); //turn json into csv values
 
     } catch (error) {
@@ -100,7 +153,19 @@ export default function ScannerScreen() {
       const insertData = parsedItems.map(item => ({
         user_id: userId,
         item_name: item.item_name,
-        quantity: String(item.quantity)
+        quantity: String(item.quantity),
+        price: item.price || null,
+        category: item.category || null,
+        receipt_id: item.receipt_id || null,
+        merchant_name: item.merchant_name || null,
+        customer_name: item.customer_name || null,
+        receipt_data: item.receipt_date || null,
+        tax: item.tax || null,
+        discount: item.discount || null,
+        total: item.total || null,
+        payment_method: item.payment_method || 'cash',
+        currency: item.currency || null,
+        raw_receipt_json: item.raw_receipt_json || null,
       }));
 
       // created the "pantry_items" table in supabase manually
