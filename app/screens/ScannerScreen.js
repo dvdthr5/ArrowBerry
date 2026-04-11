@@ -12,21 +12,20 @@ export default function ScannerScreen() {
 
   // image uploading
   const pickImage = async () => {
-    // permission to access camera roll
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync(); // camera roll permission req
     if (permissionResult.granted === false) {
       Alert.alert("Permission to access camera roll is required!");
       return;
     }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
+    let result = await ImagePicker.launchImageLibraryAsync({ // store image that use selects
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.7,
       base64: true,
     });
 
-    if (!result.canceled) {
+    if (!result.canceled) { // if storing image was unsuccessful
       setImageUri(result.assets[0].uri);
       setBase64Image(result.assets[0].base64);
       setCsvData(""); // Reset previous scans
@@ -36,17 +35,10 @@ export default function ScannerScreen() {
 
   // sending image to gemini and extracting the text in json format
   const analyzeReceipt = async () => {
-    if (!base64Image) return Alert.alert("No image", "Select an image first.");
+    if (!base64Image) return Alert.alert("No image", "Select an image first."); // precautionary, error should already be caught at this point
     
     const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    
-    // debugging
-    console.log("--- DEBUG START ---");
-    console.log("API Key exists:", !!API_KEY); 
-    console.log("Model URL:", `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent`);
-    
     setLoading(true);
-    
     try {
       const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
       if (!API_KEY) throw new Error("Missing Gemini API Key in .env file");
@@ -68,27 +60,21 @@ export default function ScannerScreen() {
       });
 
       const data = await response.json();
-
-      // debug
-      console.log("LLM Raw Response:", JSON.stringify(data, null, 2));
-
       if (data.error) {
         console.error("Gemini API Error:", data.error);
         throw new Error(data.error.message);
 
       }
-      
-      // Parse the JSON
-      const textOutput = data.candidates[0].content.parts[0].text.trim();
-      const items = JSON.parse(textOutput);
+      const textOutput = data.candidates[0].content.parts[0].text.trim(); //trim whitespace
+      const items = JSON.parse(textOutput); //parse the json
       setParsedItems(items);
 
-      // Create CSV format string
-      let generatedCsv = "Item,Quantity\n";
+  
+      let generatedCsv = "Item,Quantity\n"; //format
       items.forEach(item => {
         generatedCsv += `${item.item_name},${item.quantity}\n`;
       });
-      setCsvData(generatedCsv);
+      setCsvData(generatedCsv); //turn json into csv values
 
     } catch (error) {
       console.error("Analysis Error:", error);
@@ -105,7 +91,7 @@ export default function ScannerScreen() {
       const { data: userData, error: authError } = await supabase.auth.getUser();
       
       if (authError || !userData?.user) {
-        throw new Error("You must be logged in to save items to the database.");
+        throw new Error("You must be logged in.");
       }
 
       const userId = userData.user.id;
@@ -123,7 +109,7 @@ export default function ScannerScreen() {
       if (dbError) throw dbError;
 
       Alert.alert("Success!", "Receipt items saved to database.");
-      setCsvData("");
+      setCsvData(""); 
       setImageUri(null);
 
     } catch (error) {
@@ -154,7 +140,7 @@ export default function ScannerScreen() {
 
       {loading && <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />}
 
-      {/* Display the extracted text for the user to confirm */}
+      {/*TODO: Display the extracted text for the user to confirm */}
       {csvData ? (
         <View style={styles.resultsContainer}>
           <Text style={styles.subtitle}>Extracted CSV Data:</Text>

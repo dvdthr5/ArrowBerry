@@ -40,3 +40,5 @@ export default function TabNavigator() {
     </Tab.Navigator>
   );
 }
+
+/* Default framework for React navigation bar. Tab naviagotor is the bar itself and tab screens are the buttons on the bar.*/
