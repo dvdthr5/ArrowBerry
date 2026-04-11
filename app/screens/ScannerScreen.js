@@ -65,7 +65,7 @@ export default function ScannerScreen() {
         throw new Error(data.error.message);
 
       }
-      const textOutput = data.candidates[0].content.parts[0].text.trim(); //trim whitespace
+      const textOutput = data.candidates[0].content.parts[0].text.trim(); //trim whitespace from item_name
       const items = JSON.parse(textOutput); //parse the json
       setParsedItems(items);
 
