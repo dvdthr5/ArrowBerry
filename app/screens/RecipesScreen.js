@@ -21,6 +21,7 @@ export default function RecipesScreen() {
           <Text style={styles.logoutButtonText}>Logout</Text>
         </Pressable>
       </View>
+ 
 
       <View style={styles.content}>
         <Text style={styles.title}>👨‍🍳 Recipe Ideas</Text>
@@ -29,7 +30,8 @@ export default function RecipesScreen() {
     </View>
   );
 }
-
+     /*handleLogoutPress - default function from supabase for handling logout, session management handled by supabase*/
+     
 const styles = StyleSheet.create({
   container: {
     flex: 1,
