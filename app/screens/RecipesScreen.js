@@ -1,8 +1,12 @@
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 
 export default function RecipesScreen() {
+
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
@@ -10,6 +14,19 @@ export default function RecipesScreen() {
     if (error){
       console.error('Logout failed', error.message);
     }
+  }
+
+  useEffect(() => {
+      fetchRecipes(); 
+    }, []);
+
+  async function fetchRecipes(){
+    const { data, error } = await supabase.from('recipes').select('*').limit(5);
+
+    if (!error){
+      setRecipes(data || []);
+    }
+    setLoading(false);
   }
 
 
@@ -25,7 +42,13 @@ export default function RecipesScreen() {
 
       <View style={styles.content}>
         <Text style={styles.title}>👨‍🍳 Recipe Ideas</Text>
-        <Text>AI recommendations will appear here.</Text>
+        {loading ? (
+          <Text>Loading...</Text>
+        ) : (
+          recipes.map((recipe) => (
+            <Text key = {recipe.id}>{recipe.title}</Text>
+          ))
+        )}
       </View>
     </View>
   );
