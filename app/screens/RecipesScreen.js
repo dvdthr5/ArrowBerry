@@ -123,7 +123,9 @@ export default function RecipesScreen() {
   );
 } 
      /*handleLogoutPress - default function from supabase for handling logout, session management handled by supabase*/
-     
+     /* fetch recipes - currently just grabs the first 5 recipes from the database and displays them in the Recipe card view*/
+     /* TODO: once alg is completed we need to change fetchRecipes function to fetchMakeableRecipes*/
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -201,3 +203,8 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
 });
+
+/* CSS Styles for components on recipe page*/
+/* currently main componenets are recipe cards and logout button and the recipeDetails componnent at the bottom */
+/* TODO: make details component a page popup not a componenet at the bottom of the page. */
+/* TODO: once profile page is created, move logout button to profile page*/
