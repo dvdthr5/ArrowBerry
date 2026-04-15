@@ -205,5 +205,6 @@ const styles = StyleSheet.create({
 });
 
 /* CSS Styles for components on recipe page*/
-/* currently main componenets are recipe cards and logout button and the recipeDetails componnent at the bottom */\
+/* currently main componenets are recipe cards and logout button and the recipeDetails componnent at the bottom */
 /* TODO: make details component a page popup not a componenet at the bottom of the page. */
+/* TODO: once profile page is created, move logout button to profile page*/

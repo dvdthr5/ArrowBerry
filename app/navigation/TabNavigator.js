@@ -14,6 +14,8 @@ export default function TabNavigator() {
         tabBarActiveTintColor: '#4CAF50',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: { paddingBottom: 5, height: 60 },
+        headerStyle: {height: 80},
+        headerTitleStyle: {fontSize: 16},
       }}
     >
       <Tab.Screen
