@@ -1,8 +1,25 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 
+
+function RecipeCard({ recipe, onPress }){
+  return (
+    <Pressable style = {styles.recipeCard} onPress={() => onPress(recipe)}>
+      <Text style={styles.recipeCardTitle}>{recipe.title}</Text>
+      {!!recipe.description && (
+        <Text style={styles.recipeCardDescription}>{recipe.description}</Text>
+      )}
+      <Text style={styles.recipeCardHint}>Tap to view full recipe details</Text>
+    </Pressable>
+  );
+}
+
 export default function RecipesScreen() {
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
@@ -10,6 +27,24 @@ export default function RecipesScreen() {
     if (error){
       console.error('Logout failed', error.message);
     }
+  }
+
+  function handleRecipePress(recipe){
+      setSelectedRecipe(recipe);
+  }
+  
+
+  useEffect(() => {
+      fetchRecipes(); 
+    }, []);
+
+  async function fetchRecipes(){
+    const { data, error } = await supabase.from('recipes').select('*').limit(5);
+
+    if (!error){
+      setRecipes(data || []);
+    }
+    setLoading(false);
   }
 
 
@@ -23,13 +58,70 @@ export default function RecipesScreen() {
       </View>
  
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>👨‍🍳 Recipe Ideas</Text>
-        <Text>AI recommendations will appear here.</Text>
-      </View>
+
+        {loading ? (
+          <Text>Loading...</Text>
+        ) : (
+          <>
+            <View style={styles.recipeList}>
+              {recipes.map((recipe) => (
+                <RecipeCard
+                  key = {recipe.id}
+                  recipe = {recipe}
+                  onPress = {handleRecipePress}
+                />
+              ))}
+            </View>
+
+            {selectedRecipe && (
+              <View style={styles.recipeDetailsCard}>
+                <Text style={styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
+
+                {!!selectedRecipe.description && (
+                  <Text style={styles.recipeDetailsText}>
+                    Description: {selectedRecipe.description}
+                  </Text>
+                )}
+
+                {!!selectedRecipe.instructions && (
+                  <Text style={styles.recipeDetailsText}>
+                    Instructions: {selectedRecipe.instructions}
+                  </Text>
+                )}
+
+                {selectedRecipe.prep_time_minutes != null && (
+                  <Text style={styles.recipeDetailsText}>
+                    Prep Time: {selectedRecipe.prep_time_minutes} minutes
+                  </Text>
+                )}
+
+                {selectedRecipe.cook_time_minutes != null && (
+                  <Text style={styles.recipeDetailsText}>
+                    Cook Time: {selectedRecipe.cook_time_minutes} minutes
+                  </Text>
+                )}
+
+                {selectedRecipe.servings != null && (
+                  <Text style={styles.recipeDetailsText}>
+                    Servings: {selectedRecipe.servings}
+                  </Text>
+                )}
+
+                {!!selectedRecipe.source && (
+                  <Text style={styles.recipeDetailsText}>
+                    Source: {selectedRecipe.source}
+                  </Text>
+                )}
+            </View>
+          )}
+        </>
+        )}
+      </ScrollView>
     </View>
   );
-}
+} 
      /*handleLogoutPress - default function from supabase for handling logout, session management handled by supabase*/
      
 const styles = StyleSheet.create({
@@ -60,6 +152,52 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  recipeList: {
+    gap: 12,
+    marginTop: 12,
+  },
+  recipeCard: {
+    backgroundColor: '#f7f7f7',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  recipeCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  recipeCardDescription: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 8,
+  },
+  recipeCardHint: {
+    fontSize: 12,
+    color: '#2e7d32',
+  },
+  recipeDetailsCard: {
+    marginTop: 20,
+    backgroundColor: '#fff8e1',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f0d88c',
+  },
+  recipeDetailsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  recipeDetailsText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
   },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
 });
