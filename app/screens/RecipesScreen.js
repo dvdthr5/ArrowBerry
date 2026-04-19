@@ -219,11 +219,11 @@ const styles = StyleSheet.create({
   modalCard:{
     width: '100%',
     maxHeight: '80%',
-    backgroundColor: '#fff8e1',
+    backgroundColor: '#c9cbcc',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#f0d88c',
+    borderColor: '#6b6e6d',
     elevation: 6,
   },
   modalHeader: {
