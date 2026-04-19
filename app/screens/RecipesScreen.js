@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 
@@ -30,9 +30,19 @@ export default function RecipesScreen() {
   }
 
   function handleRecipePress(recipe){
-      setSelectedRecipe(recipe);
+    setSelectedRecipe(recipe);
+  }
+
+  function handleCloseRecipeModal(){
+    setSelectedRecipe(null);
   }
   
+  function formatRecipeInstructions(instructions){
+    if (!instructions){
+      return '';
+    }
+    return instructions.replace(/\s*(\d+\.)\s/g, '\n$1 ').trim();
+  }
 
   useEffect(() => {
       fetchRecipes(); 
@@ -74,51 +84,64 @@ export default function RecipesScreen() {
                 />
               ))}
             </View>
-
-            {selectedRecipe && (
-              <View style={styles.recipeDetailsCard}>
-                <Text style={styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
-
-                {!!selectedRecipe.description && (
-                  <Text style={styles.recipeDetailsText}>
-                    Description: {selectedRecipe.description}
-                  </Text>
-                )}
-
-                {!!selectedRecipe.instructions && (
-                  <Text style={styles.recipeDetailsText}>
-                    Instructions: {selectedRecipe.instructions}
-                  </Text>
-                )}
-
-                {selectedRecipe.prep_time_minutes != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Prep Time: {selectedRecipe.prep_time_minutes} minutes
-                  </Text>
-                )}
-
-                {selectedRecipe.cook_time_minutes != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Cook Time: {selectedRecipe.cook_time_minutes} minutes
-                  </Text>
-                )}
-
-                {selectedRecipe.servings != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Servings: {selectedRecipe.servings}
-                  </Text>
-                )}
-
-                {!!selectedRecipe.source && (
-                  <Text style={styles.recipeDetailsText}>
-                    Source: {selectedRecipe.source}
-                  </Text>
-                )}
-            </View>
-          )}
-        </>
+            </>
         )}
-      </ScrollView>
+        </ScrollView>
+        <Modal 
+          visible={!!selectedRecipe} 
+          transparent = {true} 
+          animationType='fade'
+          onRequestClose={handleCloseRecipeModal}
+          >
+            <View style = {styles.modalOverlay}>
+              <Pressable style = {styles.modalBackdrop} onPress={handleCloseRecipeModal} />
+              <View style={styles.modalCard}>
+                {selectedRecipe && (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <Text style = {styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
+                      <Pressable style = {styles.modalCloseButton} onPress={handleCloseRecipeModal}>
+                        <Text style={styles.modalCloseButtonText}>Close</Text>
+                      </Pressable>
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {!!selectedRecipe.description && (
+                        <Text style = {styles.recipeDetailsText}>
+                          Description: {selectedRecipe.description}
+                        </Text>
+                      )}
+                      {selectedRecipe.prep_time_minutes != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Prep Time: {selectedRecipe.prep_time_minutes} minutes
+                        </Text>
+                      )}
+                      {selectedRecipe.cook_time_minutes != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Cook Time: {selectedRecipe.cook_time_minutes} minutes
+                        </Text>
+                      )}
+                      {selectedRecipe.servings != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Servings: {selectedRecipe.servings}
+                        </Text>
+                      )}
+                      {!!selectedRecipe.instructions && (
+                        <Text style={styles.recipeDetailsText}>
+                          Instructions:{'\n'}{formatRecipeInstructions(selectedRecipe.instructions)}
+                        </Text>
+                      )}
+                      {!!selectedRecipe.source && (
+                        <Text style={styles.recipeDetailsText}>
+                          Source: {selectedRecipe.source}
+                        </Text>
+                      )}
+                    </ScrollView>
+                  </>
+                )}
+              </View>
+            </View>
+          </Modal>
     </View>
   );
 } 
@@ -183,13 +206,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#2e7d32',
   },
-  recipeDetailsCard: {
-    marginTop: 20,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  modalCard:{
+    width: '100%',
+    maxHeight: '80%',
     backgroundColor: '#fff8e1',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
     borderColor: '#f0d88c',
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  modalCloseButton: {
+    paddingVertical: 8, 
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#111',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   recipeDetailsTitle: {
     fontSize: 20,
