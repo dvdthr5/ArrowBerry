@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
-  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraActive, setCameraActive] = useState(true);
   const cameraRef = useRef(null);
 
   const [imageUri, setImageUri] = useState(null);
@@ -123,6 +123,9 @@ export default function ScannerScreen() {
       Alert.alert("Success!", "Receipt items saved to database.");
       setCsvData("");
       setImageUri(null);
+      setBase64Image(null);
+      setParsedItems([]);
+      setCameraActive(true);
 
     } catch (error) {
       Alert.alert("Save Failed", error.message);
@@ -133,7 +136,7 @@ export default function ScannerScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📷 Scan Receipt</Text>
+      <Text style={styles.title}>📷 Scan Your Receipt</Text>
       
       {cameraActive ? (
         <View style={styles.cameraContainer}>
@@ -146,14 +149,12 @@ export default function ScannerScreen() {
         </View>
       ) : (
         <View style={styles.previewContainer}>
-          {!imageUri ? (
-            <Button title="1. Open Camera" onPress={() => setCameraActive(true)} />
-          ) : (
+          {!!imageUri && (
             <>
               <Image source={{ uri: imageUri }} style={styles.image} />
               <View style={styles.buttonRow}>
                  <Button title="Retake" onPress={() => setCameraActive(true)} color="gray" />
-                 {!csvData && <Button title="2. Analyze with LLM" onPress={analyzeReceipt} disabled={loading} color="purple" />}
+                 {!csvData && <Button title="Analyze with LLM" onPress={analyzeReceipt} disabled={loading} color="purple" />}
               </View>
             </>
           )}
