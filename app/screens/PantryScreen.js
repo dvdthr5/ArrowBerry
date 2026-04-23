@@ -59,6 +59,11 @@ export default function PantryScreen() {
     setExpirationDate('');
   };
 
+  const normalizeUnit = (value) => {
+    if (!value) return '';
+    return value.trim().toLowerCase().replace(/\s+/g, '');
+  };
+
   const handleAddItem = async () => {
     if (!itemName.trim()) {
       Alert.alert('Missing Info', 'Please enter an item name.');
@@ -67,15 +72,21 @@ export default function PantryScreen() {
 
     setSaving(true);
 
+    const normalizedItemName = itemName.trim();
+    const normalizedQuantity = quantity.trim() ? parseFloat(quantity.trim()) : null;
+    const normalizedMeasuringUnit = normalizeUnit(measuringUnit) || null;
+    const normalizedCategory = category.trim() || null;
+    const normalizedExpirationDate = expirationDate.trim() || null;
+
     const { data: { user } } = await supabase.auth.getUser();
 
     const { error } = await supabase.from('pantry_items').insert({
       user_id: user.id,           // links to the logged in user
-      item_name: itemName.trim(),
-      quantity: quantity ? parseFloat(quantity) : null,
-      measuringUnit: measuringUnit || null,
-      category: category || null,
-      expiration_date: expirationDate || null,
+      item_name: normalizedItemName,
+      quantity: normalizedQuantity,
+      measuringUnit: normalizedMeasuringUnit,
+      category: normalizedCategory,
+      expiration_date: normalizedExpirationDate,
       // id and created_at are auto-filled by Supabase
     });
 
@@ -242,15 +253,19 @@ export default function PantryScreen() {
 
               {/* Quick Unit Selector */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                {UNITS.map((u) => (
-                  <TouchableOpacity
-                    key={u}
-                    style={[styles.chip, measuringUnit === u && styles.chipActive]}
-                    onPress={() => setMeasuringUnit(u)}
-                  >
-                    <Text style={[styles.chipText, measuringUnit === u && styles.chipTextActive]}>{u}</Text>
-                  </TouchableOpacity>
-                ))}
+                {UNITS.map((u) => {
+                  const isSelected = normalizeUnit(measuringUnit) === normalizeUnit(u);
+
+                  return (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chip, isSelected && styles.chipActive]}
+                      onPress={() => setMeasuringUnit(u)}
+                    >
+                      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{u}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
 
               {/* Expiration Date */}
