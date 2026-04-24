@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Button, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 
@@ -32,7 +32,29 @@ export default function RecipesScreen() {
   function handleRecipePress(recipe){
       setSelectedRecipe(recipe);
   }
-  
+
+  // --- NEW: Function to save the recipe to the database ---
+  async function handleSaveRecipe(recipe) {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !userData?.user) {
+      return Alert.alert("Error", "You must be logged in to save recipes.");
+    }
+
+    const { error } = await supabase.from('saved_recipes').insert([
+      { 
+        user_id: userData.user.id, 
+        recipe_id: recipe.id,
+        recipe_title: recipe.title 
+      }
+    ]);
+
+    if (error) {
+      Alert.alert("Failed to save", error.message);
+    } else {
+      Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
+    }
+  }
 
   useEffect(() => {
       fetchRecipes(); 
@@ -114,6 +136,15 @@ export default function RecipesScreen() {
                     Source: {selectedRecipe.source}
                   </Text>
                 )}
+
+                {/* --- NEW: Save Button --- */}
+                <View style={{ marginTop: 15 }}>
+                  <Button 
+                    title="❤️ Save to Profile" 
+                    color="#28a745" 
+                    onPress={() => handleSaveRecipe(selectedRecipe)} 
+                  />
+                </View>
             </View>
           )}
         </>
