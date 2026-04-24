@@ -142,7 +142,6 @@ export default function ScannerScreen() {
         <View style={styles.cameraContainer}>
           <CameraView style={styles.camera} facing="back" ref={cameraRef} />
           <View style={styles.cameraControls}>
-            <Button title="Cancel" color="red" onPress={() => setCameraActive(false)} />
             <TouchableOpacity style={styles.captureButton} onPress={takePicture} />
             <View style={{ width: 60 }} /> {/* Spacer */}
           </View>
