@@ -47,7 +47,7 @@ export default function ScannerScreen() {
   };
 
 
-  const analyzeReceipt = async () => {
+const analyzeReceipt = async () => {
     if (!base64Image) return Alert.alert("No image", "Please take a photo first.");
     setLoading(true);
     
@@ -67,8 +67,9 @@ export default function ScannerScreen() {
           contents: [{
             parts: [
               { text: "Extract food items and quantities from this receipt. Return ONLY a valid JSON array of objects with keys 'item_name' and 'quantity'. No markdown formatting." },
-              { inline_data: { 
-                  mime_type: "image/jpeg", 
+              { 
+                inlineData: { // camelCase for gemini api
+                  mimeType: "image/jpeg", 
                   data: cleanBase64
                 } 
               }
@@ -79,16 +80,21 @@ export default function ScannerScreen() {
 
       const data = await response.json();
 
-    
       if (data.error) {
         console.log("--- GOOGLE API ERROR DETAILS ---");
         console.log("Message:", data.error.message);
-        console.log("Status:", data.error.status);
         throw new Error(data.error.message);
       }
 
-      const textOutput = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
-      const items = JSON.parse(textOutput);
+      const candidate = data.candidates?.[0];
+      if (!candidate || !candidate.content || !candidate.content.parts) {
+        throw new Error("Gemini couldn't find any items. Try a clearer photo.");
+      }
+
+      const textOutput = candidate.content.parts[0].text;
+      const cleanedOutput = textOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      const items = JSON.parse(cleanedOutput);
       setParsedItems(items);
 
       let generatedCsv = "Item,Quantity\n";
@@ -143,24 +149,29 @@ export default function ScannerScreen() {
           <CameraView style={styles.camera} facing="back" ref={cameraRef} />
           <View style={styles.cameraControls}>
             <TouchableOpacity style={styles.captureButton} onPress={takePicture} />
-            <View style={{ width: 60 }} /> {/* Spacer */}
+            <View style={{ width: 60 }} />{/*  */}
           </View>
         </View>
       ) : (
         <View style={styles.previewContainer}>
-          {!!imageUri && (
-            <>
+          {!imageUri ? (
+            <Button title="1. Open Camera" onPress={() => setCameraActive(true)} />
+          ) : (
+            <View style={{ alignItems: 'center', width: '100%' }}>{/* Wrapper View */}
               <Image source={{ uri: imageUri }} style={styles.image} />
               <View style={styles.buttonRow}>
-                 <Button title="Retake" onPress={() => setCameraActive(true)} color="gray" />
-                 {!csvData && <Button title="Analyze with LLM" onPress={analyzeReceipt} disabled={loading} color="purple" />}
+                <Button title="Retake" onPress={() => setCameraActive(true)} color="gray" />
+                {/*  */}
+                {!csvData ? (
+                  <Button title="2. Analyze with LLM" onPress={analyzeReceipt} disabled={loading} color="purple" />
+                ) : null}
               </View>
-            </>
+            </View>
           )}
         </View>
       )}
 
-      {loading && <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />}
+      {loading ? <ActivityIndicator size="large" color="#0000ff" style={styles.loader} /> : null}
 
       {csvData ? (
         <View style={styles.resultsContainer}>

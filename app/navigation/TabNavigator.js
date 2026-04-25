@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 
 import PantryScreen from '../screens/PantryScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import RecipesScreen from '../screens/RecipesScreen';
 import ScannerScreen from '../screens/ScannerScreen';
 
@@ -37,6 +38,13 @@ export default function TabNavigator() {
         component={RecipesScreen}
         options={{
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22 }}>👨‍🍳</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22 }}>⚙️</Text>,
         }}
       />
     </Tab.Navigator>
