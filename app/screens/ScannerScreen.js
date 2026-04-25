@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
-  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraActive, setCameraActive] = useState(true);
   const cameraRef = useRef(null);
 
   const [imageUri, setImageUri] = useState(null);
@@ -129,6 +129,9 @@ const analyzeReceipt = async () => {
       Alert.alert("Success!", "Receipt items saved to database.");
       setCsvData("");
       setImageUri(null);
+      setBase64Image(null);
+      setParsedItems([]);
+      setCameraActive(true);
 
     } catch (error) {
       Alert.alert("Save Failed", error.message);
@@ -139,13 +142,12 @@ const analyzeReceipt = async () => {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📷 Scan Receipt</Text>
+      <Text style={styles.title}>📷 Scan Your Receipt</Text>
       
       {cameraActive ? (
         <View style={styles.cameraContainer}>
           <CameraView style={styles.camera} facing="back" ref={cameraRef} />
           <View style={styles.cameraControls}>
-            <Button title="Cancel" color="red" onPress={() => setCameraActive(false)} />
             <TouchableOpacity style={styles.captureButton} onPress={takePicture} />
             <View style={{ width: 60 }} />{/*  */}
           </View>

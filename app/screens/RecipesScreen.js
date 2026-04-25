@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Button, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-
-
 
 function RecipeCard({ recipe, onPress }){
   return (
@@ -30,7 +28,11 @@ export default function RecipesScreen() {
   }
 
   function handleRecipePress(recipe){
-      setSelectedRecipe(recipe);
+    setSelectedRecipe(recipe);
+  }
+
+  function handleCloseRecipeModal(){
+    setSelectedRecipe(null);
   }
 
   // --- NEW: Function to save the recipe to the database ---
@@ -54,6 +56,12 @@ export default function RecipesScreen() {
     } else {
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
+  
+  function formatRecipeInstructions(instructions){
+    if (!instructions){
+      return '';
+    }
+    return instructions.replace(/\s*(\d+\.)\s/g, '\n$1 ').trim();
   }
 
   useEffect(() => {
@@ -96,45 +104,60 @@ export default function RecipesScreen() {
                 />
               ))}
             </View>
+            </>
+        )}
+        </ScrollView>
+        <Modal 
+          visible={!!selectedRecipe} 
+          transparent = {true} 
+          animationType='fade'
+          onRequestClose={handleCloseRecipeModal}
+          >
+            <View style = {styles.modalOverlay}>
+              <Pressable style = {styles.modalBackdrop} onPress={handleCloseRecipeModal} />
+              <View style={styles.modalCard}>
+                {selectedRecipe && (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <Text style = {styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
+                      <Pressable style = {styles.modalCloseButton} onPress={handleCloseRecipeModal}>
+                        <Text style={styles.modalCloseButtonText}>Close</Text>
+                      </Pressable>
+                    </View>
 
-            {selectedRecipe && (
-              <View style={styles.recipeDetailsCard}>
-                <Text style={styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
-
-                {!!selectedRecipe.description && (
-                  <Text style={styles.recipeDetailsText}>
-                    Description: {selectedRecipe.description}
-                  </Text>
-                )}
-
-                {!!selectedRecipe.instructions && (
-                  <Text style={styles.recipeDetailsText}>
-                    Instructions: {selectedRecipe.instructions}
-                  </Text>
-                )}
-
-                {selectedRecipe.prep_time_minutes != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Prep Time: {selectedRecipe.prep_time_minutes} minutes
-                  </Text>
-                )}
-
-                {selectedRecipe.cook_time_minutes != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Cook Time: {selectedRecipe.cook_time_minutes} minutes
-                  </Text>
-                )}
-
-                {selectedRecipe.servings != null && (
-                  <Text style={styles.recipeDetailsText}>
-                    Servings: {selectedRecipe.servings}
-                  </Text>
-                )}
-
-                {!!selectedRecipe.source && (
-                  <Text style={styles.recipeDetailsText}>
-                    Source: {selectedRecipe.source}
-                  </Text>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {!!selectedRecipe.description && (
+                        <Text style = {styles.recipeDetailsText}>
+                          Description: {selectedRecipe.description}
+                        </Text>
+                      )}
+                      {selectedRecipe.prep_time_minutes != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Prep Time: {selectedRecipe.prep_time_minutes} minutes
+                        </Text>
+                      )}
+                      {selectedRecipe.cook_time_minutes != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Cook Time: {selectedRecipe.cook_time_minutes} minutes
+                        </Text>
+                      )}
+                      {selectedRecipe.servings != null && (
+                        <Text style={styles.recipeDetailsText}>
+                          Servings: {selectedRecipe.servings}
+                        </Text>
+                      )}
+                      {!!selectedRecipe.instructions && (
+                        <Text style={styles.recipeDetailsText}>
+                          Instructions:{'\n'}{formatRecipeInstructions(selectedRecipe.instructions)}
+                        </Text>
+                      )}
+                      {!!selectedRecipe.source && (
+                        <Text style={styles.recipeDetailsText}>
+                          Source: {selectedRecipe.source}
+                        </Text>
+                      )}
+                    </ScrollView>
+                  </>
                 )}
 
                 {/* --- NEW: Save Button --- */}
@@ -146,10 +169,7 @@ export default function RecipesScreen() {
                   />
                 </View>
             </View>
-          )}
-        </>
-        )}
-      </ScrollView>
+          </Modal>
     </View>
   );
 } 
@@ -214,13 +234,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#2e7d32',
   },
-  recipeDetailsCard: {
-    marginTop: 20,
-    backgroundColor: '#fff8e1',
-    borderRadius: 12,
-    padding: 16,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  modalCard:{
+    width: '100%',
+    maxHeight: '80%',
+    backgroundColor: '#c9cbcc',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#f0d88c',
+    borderColor: '#6b6e6d',
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  modalCloseButton: {
+    paddingVertical: 8, 
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#111',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   recipeDetailsTitle: {
     fontSize: 20,
