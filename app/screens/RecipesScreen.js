@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-
-
 
 function RecipeCard({ recipe, onPress }){
   return (
@@ -20,6 +18,7 @@ export default function RecipesScreen() {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
@@ -29,14 +28,51 @@ export default function RecipesScreen() {
     }
   }
 
-  function handleRecipePress(recipe){
+  async function handleRecipePress(recipe){
     setSelectedRecipe(recipe);
+
+    const { data, error } = await supabase
+      .from('recipe_ingredients')
+      .select('quantity, unit, ingredient_name')
+      .eq('recipe_id', recipe.id);
+
+    if (error) {
+      console.error('Failed to fetch recipe ingredients', error.message);
+      setSelectedRecipeIngredients([]);
+      return;
+    }
+
+    setSelectedRecipeIngredients(data || []);
   }
 
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
+    setSelectedRecipeIngredients([]);
   }
-  
+
+  // --- NEW: Function to save the recipe to the database ---
+  async function handleSaveRecipe(recipe) {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !userData?.user) {
+      return Alert.alert("Error", "You must be logged in to save recipes.");
+    }
+
+    const { error } = await supabase.from('saved_recipes').insert([
+      { 
+        user_id: userData.user.id, 
+        recipe_id: recipe.id,
+        recipe_title: recipe.title 
+      }
+    ]);
+
+    if (error) {
+      Alert.alert("Failed to save", error.message);
+    } else {
+      Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
+    }
+  }
+
   function formatRecipeInstructions(instructions){
     if (!instructions){
       return '';
@@ -49,7 +85,7 @@ export default function RecipesScreen() {
     }, []);
 
   async function fetchRecipes(){
-    const { data, error } = await supabase.from('recipes').select('*').limit(5);
+    const { data, error } = await supabase.from('recipes').select('*').limit(20);
 
     if (!error){
       setRecipes(data || []);
@@ -106,6 +142,29 @@ export default function RecipesScreen() {
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
+                      {!!selectedRecipe.image_url && (
+                        <Image
+                          source={{ uri: selectedRecipe.image_url }}
+                          style={styles.recipeImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      {!!selectedRecipeIngredients.length && (
+                        <View style={styles.ingredientsSection}>
+                          <Text style={styles.recipeDetailsText}>Ingredients:</Text>
+                          {selectedRecipeIngredients.map((ingredient, index) => {
+                            const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
+                              .filter(Boolean)
+                              .join(' ');
+
+                            return (
+                              <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
+                                • {ingredientLine}
+                              </Text>
+                            );
+                          })}
+                        </View>
+                      )}
                       {!!selectedRecipe.description && (
                         <Text style = {styles.recipeDetailsText}>
                           Description: {selectedRecipe.description}
@@ -131,17 +190,22 @@ export default function RecipesScreen() {
                           Instructions:{'\n'}{formatRecipeInstructions(selectedRecipe.instructions)}
                         </Text>
                       )}
-                      {!!selectedRecipe.source && (
-                        <Text style={styles.recipeDetailsText}>
-                          Source: {selectedRecipe.source}
-                        </Text>
-                      )}
                     </ScrollView>
                   </>
                 )}
-              </View>
+
+                {/* --- NEW: Save Button --- */}
+                <View style={{ marginTop: 15 }}>
+                  <Button 
+                    title="❤️ Save to Profile" 
+                    color="#28a745" 
+                    onPress={() => handleSaveRecipe(selectedRecipe)} 
+                  />
+                </View>
+            </View>
             </View>
           </Modal>
+          
     </View>
   );
 } 
@@ -233,6 +297,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
+  recipeImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  ingredientsSection: {
+    marginBottom: 12,
+  },
   modalCloseButton: {
     paddingVertical: 8, 
     paddingHorizontal: 12,
@@ -258,5 +331,3 @@ const styles = StyleSheet.create({
 
 /* CSS Styles for components on recipe page*/
 /* currently main componenets are recipe cards and logout button and the recipeDetails componnent at the bottom */
-/* TODO: make details component a page popup not a componenet at the bottom of the page. */
-/* TODO: once profile page is created, move logout button to profile page*/
