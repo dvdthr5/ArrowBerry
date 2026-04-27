@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +20,26 @@ import { supabase } from '../../lib/supabase';
 
 const CATEGORIES = ['Produce', 'Dairy', 'Meat', 'Seafood', 'Grains', 'Frozen', 'Snacks', 'Beverages', 'Condiments', 'Other'];
 const UNITS = ['g', 'kg', 'oz', 'lb', 'ml', 'L', 'tsp', 'tbsp', 'cup', 'pcs', 'pack'];
+
+function SwipeableRow({ children, onDelete }) {
+  const renderRightActions = () => (
+    <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
+      <Text style={styles.deleteIcon}>🗑️</Text>
+      <Text style={styles.deleteText}>Delete</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <Swipeable
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+      overshootRight={false}
+      containerStyle={{ width: '100%' }}
+    >
+      {children}
+    </Swipeable>
+  );
+}
 
 export default function PantryScreen() {
   const [items, setItems] = useState([]);
@@ -65,6 +86,7 @@ export default function PantryScreen() {
   };
 
   const handleAddItem = async () => {
+
     if (!itemName.trim()) {
       Alert.alert('Missing Info', 'Please enter an item name.');
       return;
@@ -101,6 +123,19 @@ export default function PantryScreen() {
     }
   };
 
+  const handleDeleteItem = async (id) => {
+    const { error } = await supabase
+      .from('pantry_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    }
+  };
+
   const getExpiryStatus = (dateStr) => {
     if (!dateStr) return { label: 'No expiry', color: '#aaa' };
     const today = new Date();
@@ -112,38 +147,43 @@ export default function PantryScreen() {
     return { label: `Expires ${expiry.toLocaleDateString()}`, color: '#43A047' };
   };
 
+
   const renderItem = ({ item }) => {
     const expiry = getExpiryStatus(item.expiration_date);
     return (
-      <View style={styles.card}>
-        <View style={styles.imageContainer}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.image} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.imagePlaceholderText}>🛒</Text>
+      <SwipeableRow onDelete={() => handleDeleteItem(item.id)}>
+        <View style={styles.card}>
+          <View style={styles.card}>
+            <View style={styles.imageContainer}>
+              {item.image_url ? (
+                <Image source={{ uri: item.image_url }} style={styles.image} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Text style={styles.imagePlaceholderText}>🛒</Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-        <View style={styles.content}>
-          <Text style={styles.itemName}>{item.item_name}</Text>
-          {item.category && (
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
-          )}
-          <View style={styles.row}>
-            <View style={styles.quantityBox}>
-              <Text style={styles.quantityNumber}>{item.quantity}</Text>
-              <Text style={styles.quantityUnit}>{item.measuringUnit ?? item.measuring_unit}</Text>
-            </View>
-            <View style={[styles.expiryBadge, { borderColor: expiry.color }]}>
-              <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
-              <Text style={[styles.expiryText, { color: expiry.color }]}>{expiry.label}</Text>
+            <View style={styles.content}>
+              <Text style={styles.itemName}>{item.item_name}</Text>
+              {item.category && (
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryText}>{item.category}</Text>
+                </View>
+              )}
+              <View style={styles.row}>
+                <View style={styles.quantityBox}>
+                  <Text style={styles.quantityNumber}>{item.quantity}</Text>
+                  <Text style={styles.quantityUnit}>{item.measuringUnit ?? item.measuring_unit}</Text>
+                </View>
+                <View style={[styles.expiryBadge, { borderColor: expiry.color }]}>
+                  <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
+                  <Text style={[styles.expiryText, { color: expiry.color }]}>{expiry.label}</Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>
-      </View>
+      </SwipeableRow>
     );
   };
 
@@ -321,7 +361,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF', borderRadius: 16, flexDirection: 'row',
     overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, marginBottom: 12,
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, marginBottom: 12, width: '100%',
   },
   imageContainer: { width: 90, backgroundColor: '#EEF3EB', justifyContent: 'center' },
   image: { width: 90, height: '100%', resizeMode: 'cover' },
@@ -397,4 +437,22 @@ const styles = StyleSheet.create({
   categoryChipActive: { backgroundColor: '#EEF3EB', borderColor: '#4CAF50' },
   categoryChipText: { fontSize: 13, color: '#555', fontWeight: '500' },
   categoryChipTextActive: { color: '#4CAF50', fontWeight: '700' },
+deleteAction: {
+    backgroundColor: '#e53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 16,
+    marginBottom: 12,
+    gap: 4,
+  },
+  deleteIcon: {
+    fontSize: 20,
+  },
+  deleteText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
 });
