@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { getRecipeRecommendations } from '../../lib/recommendations';
 
-function RecipeCard({ recipe, onPress }){
+function RecipeCard({ recipe, onPress }) {
   return (
-    <Pressable style = {styles.recipeCard} onPress={() => onPress(recipe)}>
+    <Pressable style={styles.recipeCard} onPress={() => onPress(recipe)}>
       <Text style={styles.recipeCardTitle}>{recipe.title}</Text>
+      <Text style={styles.recipeMatchBadge}>
+        {Math.round(recipe.match_percentage * 100)}% match
+        {' • '}
+        {recipe.matched_ingredients}/{recipe.total_ingredients} ingredients
+      </Text>
       {!!recipe.description && (
         <Text style={styles.recipeCardDescription}>{recipe.description}</Text>
+      )}
+      {recipe.missing_list && recipe.missing_list.length > 0 && (
+        <Text style={styles.recipeMissing}>
+          Missing: {recipe.missing_list.map(m => m.ingredient_name).join(', ')}
+        </Text>
       )}
       <Text style={styles.recipeCardHint}>Tap to view full recipe details</Text>
     </Pressable>
@@ -72,7 +83,6 @@ export default function RecipesScreen() {
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
-
   function formatRecipeInstructions(instructions){
     if (!instructions){
       return '';
@@ -84,15 +94,31 @@ export default function RecipesScreen() {
       fetchRecipes(); 
     }, []);
 
-  async function fetchRecipes(){
-    const { data, error } = await supabase.from('recipes').select('*').limit(20);
+async function fetchRecipes() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Session:', session?.user?.id);
 
-    if (!error){
-      setRecipes(data || []);
+    if (!session?.user?.id) {
+      console.log('No session - user not logged in');
+      setLoading(false);
+      return;
     }
+
+    console.log('Calling RPC for user:', session.user.id);
+    const results = await getRecipeRecommendations(session.user.id, {
+      minMatch: 0.0,
+    });
+    console.log('RPC returned', results.length, 'recipes');
+    console.log('First recipe:', results[0]);
+
+    setRecipes(results);
+  } catch (err) {
+    console.error('Error fetching recipes:', err);
+  } finally {
     setLoading(false);
   }
-
+}
 
   return (
     <View style={styles.container}>
@@ -114,7 +140,7 @@ export default function RecipesScreen() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {recipe.id}
+                  key = {recipe.recipe_id}
                   recipe = {recipe}
                   onPress = {handleRecipePress}
                 />
@@ -202,7 +228,7 @@ export default function RecipesScreen() {
                     onPress={() => handleSaveRecipe(selectedRecipe)} 
                   />
                 </View>
-            </View>
+              </View>
             </View>
           </Modal>
           
@@ -327,6 +353,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
+  recipeMatchBadge: {
+    fontSize: 13,
+    color: '#2e7d32',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  recipeMissing: {
+    fontSize: 12,
+    color: '#c0392b',
+    marginBottom: 6,
+  },
 });
 
 /* CSS Styles for components on recipe page*/
