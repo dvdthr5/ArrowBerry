@@ -5,9 +5,7 @@ import RegisterScreen from '../../app/signup';
 import { supabase } from '../../lib/supabase';
 
 const mockInsert = jest.fn();
-const mockFrom = jest.fn(() => ({
-  insert: mockInsert,
-}));
+
 
 jest.mock('expo-router', () => ({
   router: {
