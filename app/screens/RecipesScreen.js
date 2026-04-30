@@ -77,7 +77,38 @@ export default function RecipesScreen() {
     if (!instructions){
       return '';
     }
-    return instructions.replace(/\s*(\d+\.)\s/g, '\n$1 ').trim();
+
+    const instructionText = Array.isArray(instructions)
+      ? instructions.join('\n')
+      : String(instructions);
+
+    const formattedInstructions = instructionText
+      .replace(/\s*(\d+\.)\s/g, '\n$1 ')
+      .trim();
+
+    const lines = formattedInstructions
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const uniqueLines = [];
+    const seenInstructionText = new Set();
+
+    lines.forEach((line) => {
+      const instructionBody = line
+        .replace(/^\d+\.\s*/, '')
+        .trim()
+
+      const normalizedLine = instructionBody.toLowerCase()
+      if (seenInstructionText.has(normalizedLine)) {
+        return;
+      }
+
+      seenInstructionText.add(normalizedLine);
+      uniqueLines.push(`${uniqueLines.length + 1}. ${instructionBody}`);
+    });
+
+    return uniqueLines.join('\n');
   }
 
   useEffect(() => {
