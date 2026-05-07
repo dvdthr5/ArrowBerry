@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Button, ScrollView, StyleSheet, Switch, Text, View, Pressable, Modal, Image } from 'react-native';
+import { ActivityIndicator, Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
@@ -286,7 +286,6 @@ const styles = StyleSheet.create({
   
   // Saved Recipe Item Styles
   recipeItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8f9fa', padding: 15, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#e0e0e0' },
-  recipeTitle: { fontSize: 16, fontWeight: '600', color: '#333', flexShrink: 1 },
   viewText: { fontSize: 14, color: '#007bff', fontWeight: '500' },
   emptyText: { fontStyle: 'italic', color: '#888' },
 
