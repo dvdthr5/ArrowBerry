@@ -29,8 +29,10 @@ const mockRecipeData = [
 
 const mockLimit = jest.fn();
 const mockEq = jest.fn();
-const mockSelect = jest.fn(() => ({
+const mockRecipesSelect = jest.fn(() => ({
   limit: mockLimit,
+}));
+const mockIngredientsSelect = jest.fn(() => ({
   eq: mockEq,
 }));
 const mockInsert = jest.fn();
@@ -39,11 +41,32 @@ jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
+      signOut: jest.fn(),
     },
-    from: jest.fn(() => ({
-      select: mockSelect,
-      insert: mockInsert,
-    })),
+    from: jest.fn((table) => {
+      if (table === 'recipes') {
+        return {
+          select: mockRecipesSelect,
+        };
+      }
+
+      if (table === 'recipe_ingredients') {
+        return {
+          select: mockIngredientsSelect,
+        };
+      }
+
+      if (table === 'saved_recipes') {
+        return {
+          insert: mockInsert,
+        };
+      }
+
+      return {
+        select: jest.fn(),
+        insert: jest.fn(),
+      };
+    }),
   },
 }));
 
@@ -98,7 +121,7 @@ describe('RecipeScreen', () => {
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
     expect(supabase.from).toHaveBeenCalledWith('recipes');
-    expect(mockSelect).toHaveBeenCalledWith('*');
+    expect(mockRecipesSelect).toHaveBeenCalledWith('*');
     expect(mockLimit).toHaveBeenCalledWith(20);
   });
 
