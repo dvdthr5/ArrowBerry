@@ -31,6 +31,7 @@ export default function RecipesScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
+  const [sessionSavedIds, setSessionSavedIds] = useState({});
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
 
@@ -39,7 +40,7 @@ export default function RecipesScreen() {
     }
   }
 
-  async function handleRecipePress(recipe){
+async function handleRecipePress(recipe){
     setSelectedRecipe(recipe);
 
     const { data, error } = await supabase
@@ -61,7 +62,6 @@ export default function RecipesScreen() {
     setSelectedRecipeIngredients([]);
   }
 
-  // --- NEW: Function to save the recipe to the database ---
   async function handleSaveRecipe(recipe) {
     const { data: userData, error: authError } = await supabase.auth.getUser();
     
@@ -87,7 +87,38 @@ export default function RecipesScreen() {
     if (!instructions){
       return '';
     }
-    return instructions.replace(/\s*(\d+\.)\s/g, '\n$1 ').trim();
+
+    const instructionText = Array.isArray(instructions)
+      ? instructions.join('\n')
+      : String(instructions);
+
+    const formattedInstructions = instructionText
+      .replace(/\s*(\d+\.)\s/g, '\n$1 ')
+      .trim();
+
+    const lines = formattedInstructions
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const uniqueLines = [];
+    const seenInstructionText = new Set();
+
+    lines.forEach((line) => {
+      const instructionBody = line
+        .replace(/^\d+\.\s*/, '')
+        .trim()
+
+      const normalizedLine = instructionBody.toLowerCase()
+      if (seenInstructionText.has(normalizedLine)) {
+        return;
+      }
+
+      seenInstructionText.add(normalizedLine);
+      uniqueLines.push(`${uniqueLines.length + 1}. ${instructionBody}`);
+    });
+
+    return uniqueLines.join('\n');
   }
 
   useEffect(() => {
@@ -151,86 +182,88 @@ async function fetchRecipes() {
         </ScrollView>
         <Modal 
           visible={!!selectedRecipe} 
-          transparent = {true} 
+          transparent={true} 
           animationType='fade'
           onRequestClose={handleCloseRecipeModal}
-          >
-            <View style = {styles.modalOverlay}>
-              <Pressable style = {styles.modalBackdrop} onPress={handleCloseRecipeModal} />
-              <View style={styles.modalCard}>
-                {selectedRecipe && (
-                  <>
-                    <View style={styles.modalHeader}>
-                      <Text style = {styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
-                      <Pressable style = {styles.modalCloseButton} onPress={handleCloseRecipeModal}>
-                        <Text style={styles.modalCloseButtonText}>Close</Text>
-                      </Pressable>
-                    </View>
+        >
+          <View style={styles.modalOverlay}>
+            <Pressable style={styles.modalBackdrop} onPress={handleCloseRecipeModal} />
+            <View style={styles.modalCard}>
+              {/* SAFETY CHECK: Everything inside here only runs if selectedRecipe exists */}
+              {selectedRecipe && (
+                <>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.recipeDetailsTitle}>{selectedRecipe.title}</Text>
+                    <Pressable style={styles.modalCloseButton} onPress={handleCloseRecipeModal}>
+                      <Text style={styles.modalCloseButtonText}>Close</Text>
+                    </Pressable>
+                  </View>
 
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                      {!!selectedRecipe.image_url && (
-                        <Image
-                          source={{ uri: selectedRecipe.image_url }}
-                          style={styles.recipeImage}
-                          resizeMode="cover"
-                        />
-                      )}
-                      {!!selectedRecipeIngredients.length && (
-                        <View style={styles.ingredientsSection}>
-                          <Text style={styles.recipeDetailsText}>Ingredients:</Text>
-                          {selectedRecipeIngredients.map((ingredient, index) => {
-                            const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
-                              .filter(Boolean)
-                              .join(' ');
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {!!selectedRecipe.image_url && (
+                      <Image
+                        source={{ uri: selectedRecipe.image_url }}
+                        style={styles.recipeImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    {!!selectedRecipeIngredients.length && (
+                      <View style={styles.ingredientsSection}>
+                        <Text style={styles.recipeDetailsText}>Ingredients:</Text>
+                        {selectedRecipeIngredients.map((ingredient, index) => {
+                          const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
+                            .filter(Boolean)
+                            .join(' ');
 
-                            return (
-                              <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
-                                • {ingredientLine}
-                              </Text>
-                            );
-                          })}
-                        </View>
-                      )}
-                      {!!selectedRecipe.description && (
-                        <Text style = {styles.recipeDetailsText}>
-                          Description: {selectedRecipe.description}
-                        </Text>
-                      )}
-                      {selectedRecipe.prep_time_minutes != null && (
-                        <Text style={styles.recipeDetailsText}>
-                          Prep Time: {selectedRecipe.prep_time_minutes} minutes
-                        </Text>
-                      )}
-                      {selectedRecipe.cook_time_minutes != null && (
-                        <Text style={styles.recipeDetailsText}>
-                          Cook Time: {selectedRecipe.cook_time_minutes} minutes
-                        </Text>
-                      )}
-                      {selectedRecipe.servings != null && (
-                        <Text style={styles.recipeDetailsText}>
-                          Servings: {selectedRecipe.servings}
-                        </Text>
-                      )}
-                      {!!selectedRecipe.instructions && (
-                        <Text style={styles.recipeDetailsText}>
-                          Instructions:{'\n'}{formatRecipeInstructions(selectedRecipe.instructions)}
-                        </Text>
-                      )}
-                    </ScrollView>
-                  </>
-                )}
+                          return (
+                            <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
+                              • {ingredientLine}
+                            </Text>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {!!selectedRecipe.description && (
+                      <Text style={styles.recipeDetailsText}>
+                        Description: {selectedRecipe.description}
+                      </Text>
+                    )}
+                    {selectedRecipe.prep_time_minutes != null && (
+                      <Text style={styles.recipeDetailsText}>
+                        Prep Time: {selectedRecipe.prep_time_minutes} minutes
+                      </Text>
+                    )}
+                    {selectedRecipe.cook_time_minutes != null && (
+                      <Text style={styles.recipeDetailsText}>
+                        Cook Time: {selectedRecipe.cook_time_minutes} minutes
+                      </Text>
+                    )}
+                    {selectedRecipe.servings != null && (
+                      <Text style={styles.recipeDetailsText}>
+                        Servings: {selectedRecipe.servings}
+                      </Text>
+                    )}
+                    {!!selectedRecipe.instructions && (
+                      <Text style={styles.recipeDetailsText}>
+                        Instructions:{'\n'}{formatRecipeInstructions(selectedRecipe.instructions)}
+                      </Text>
+                    )}
+                  </ScrollView>
 
-                {/* --- NEW: Save Button --- */}
-                <View style={{ marginTop: 15 }}>
-                  <Button 
-                    title="❤️ Save to Profile" 
-                    color="#28a745" 
-                    onPress={() => handleSaveRecipe(selectedRecipe)} 
-                  />
-                </View>
-              </View>
+                  {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
+                  <View style={{ marginTop: 15 }}>
+                    <Button 
+                      title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
+                      color={sessionSavedIds[selectedRecipe.id] ? "gray" : "#28a745"} 
+                      disabled={sessionSavedIds[selectedRecipe.id]}
+                      onPress={() => handleSaveRecipe(selectedRecipe)} 
+                    />
+                  </View>
+                </>
+              )}
             </View>
-          </Modal>
+          </View>
+        </Modal>
           
     </View>
   );
