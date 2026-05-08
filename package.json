@@ -22,7 +22,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.2.2",
     "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.2",
+    "@supabase/supabase-js": "^2.104.1",
     "expo": "~54.0.33",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",

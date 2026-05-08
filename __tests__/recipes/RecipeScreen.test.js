@@ -2,11 +2,13 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
 import RecipeScreen from '../../app/screens/RecipesScreen';
+import { getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
 const mockRecipeData = [
   {
     id: 1,
+    recipe_id: 1,
     title: 'Chicken Rice Bowl',
     name: 'Chicken Rice Bowl',
     recipe_name: 'Chicken Rice Bowl',
@@ -14,9 +16,14 @@ const mockRecipeData = [
     ingredients: 'chicken, rice, broccoli',
     instructions: '1. Cook rice. 2. Cook chicken. 3. Combine and serve.',
     image_url: null,
+    match_percentage: 1,
+    matched_ingredients: 2,
+    total_ingredients: 2,
+    missing_list: [],
   },
   {
     id: 2,
+    recipe_id: 2,
     title: 'Pasta Salad',
     name: 'Pasta Salad',
     recipe_name: 'Pasta Salad',
@@ -24,6 +31,10 @@ const mockRecipeData = [
     ingredients: 'pasta, tomato, olive oil',
     instructions: '1. Cook pasta. 2. Mix ingredients.',
     image_url: null,
+    match_percentage: 0.5,
+    matched_ingredients: 1,
+    total_ingredients: 2,
+    missing_list: [],
   },
 ];
 
@@ -41,6 +52,7 @@ jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
+      getSession: jest.fn(),
       signOut: jest.fn(),
     },
     from: jest.fn((table) => {
@@ -70,6 +82,10 @@ jest.mock('../../lib/supabase', () => ({
   },
 }));
 
+jest.mock('../../lib/recommendations', () => ({
+  getRecipeRecommendations: jest.fn(),
+}));
+
 describe('RecipeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -83,6 +99,19 @@ describe('RecipeScreen', () => {
       },
       error: null,
     });
+
+    supabase.auth.getSession.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: 'test-user-id',
+          },
+        },
+      },
+      error: null,
+    });
+
+    getRecipeRecommendations.mockResolvedValue(mockRecipeData);
 
     mockLimit.mockResolvedValue({
       data: mockRecipeData,
@@ -120,9 +149,10 @@ describe('RecipeScreen', () => {
 
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
-    expect(supabase.from).toHaveBeenCalledWith('recipes');
-    expect(mockRecipesSelect).toHaveBeenCalledWith('*');
-    expect(mockLimit).toHaveBeenCalledWith(20);
+    expect(supabase.auth.getSession).toHaveBeenCalled();
+    expect(getRecipeRecommendations).toHaveBeenCalledWith('test-user-id', {
+      minMatch: 0.0,
+    });
   });
 
   test('opens a recipe modal when a recipe is pressed', async () => {
