@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   ActivityIndicator,
   Alert,
@@ -8,7 +7,8 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  RefreshControl, SafeAreaView,
+  RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,17 +16,25 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { supabase } from '../../lib/supabase';
 
 const CATEGORIES = ['Produce', 'Dairy', 'Meat', 'Seafood', 'Grains', 'Frozen', 'Snacks', 'Beverages', 'Condiments', 'Other'];
 const UNITS = ['g', 'kg', 'oz', 'lb', 'ml', 'L', 'tsp', 'tbsp', 'cup', 'pcs', 'pack'];
 
-function SwipeableRow({ children, onDelete }) {
+// ─── SwipeableRow now accepts both onDelete and onEdit ───────────────────────
+function SwipeableRow({ children, onDelete, onEdit }) {
   const renderRightActions = () => (
-    <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
-      <Text style={styles.deleteIcon}>🗑️</Text>
-      <Text style={styles.deleteText}>Delete</Text>
-    </TouchableOpacity>
+    <View style={styles.swipeActions}>
+      <TouchableOpacity style={styles.editAction} onPress={onEdit}>
+        <Text style={styles.actionIcon}>✏️</Text>
+        <Text style={styles.actionText}>Edit</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
+        <Text style={styles.actionIcon}>🗑️</Text>
+        <Text style={styles.actionText}>Delete</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -41,20 +49,28 @@ function SwipeableRow({ children, onDelete }) {
   );
 }
 
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function PantryScreen() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Form state
+  // Add modal
+  const [modalVisible, setModalVisible] = useState(false);
+
+  // Edit modal — these must be INSIDE the component
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+
+  // Shared form state (used by both add and edit modals)
   const [itemName, setItemName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [measuringUnit, setMeasuringUnit] = useState('');
   const [category, setCategory] = useState('');
   const [expirationDate, setExpirationDate] = useState('');
 
+  // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchItems = async () => {
     const { data, error } = await supabase
       .from('pantry_items')
@@ -72,6 +88,7 @@ export default function PantryScreen() {
 
   const onRefresh = () => { setRefreshing(true); fetchItems(); };
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   const resetForm = () => {
     setItemName('');
     setQuantity('');
@@ -85,8 +102,19 @@ export default function PantryScreen() {
     return value.trim().toLowerCase().replace(/\s+/g, '');
   };
 
-  const handleAddItem = async () => {
+  const getExpiryStatus = (dateStr) => {
+    if (!dateStr) return { label: 'No expiry', color: '#aaa' };
+    const today = new Date();
+    const expiry = new Date(dateStr);
+    const daysLeft = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) return { label: 'Expired', color: '#e53935' };
+    if (daysLeft <= 3) return { label: `Expires in ${daysLeft}d`, color: '#FB8C00' };
+    if (daysLeft <= 7) return { label: `Expires in ${daysLeft}d`, color: '#FDD835' };
+    return { label: `Expires ${expiry.toLocaleDateString()}`, color: '#43A047' };
+  };
 
+  // ── Add item ───────────────────────────────────────────────────────────────
+  const handleAddItem = async () => {
     if (!itemName.trim()) {
       Alert.alert('Missing Info', 'Please enter an item name.');
       return;
@@ -94,22 +122,15 @@ export default function PantryScreen() {
 
     setSaving(true);
 
-    const normalizedItemName = itemName.trim();
-    const normalizedQuantity = quantity.trim() ? parseFloat(quantity.trim()) : null;
-    const normalizedMeasuringUnit = normalizeUnit(measuringUnit) || null;
-    const normalizedCategory = category.trim() || null;
-    const normalizedExpirationDate = expirationDate.trim() || null;
-
     const { data: { user } } = await supabase.auth.getUser();
 
     const { error } = await supabase.from('pantry_items').insert({
-      user_id: user.id,           // links to the logged in user
-      item_name: normalizedItemName,
-      quantity: normalizedQuantity,
-      measuringUnit: normalizedMeasuringUnit,
-      category: normalizedCategory,
-      expiration_date: normalizedExpirationDate,
-      // id and created_at are auto-filled by Supabase
+      user_id: user.id,
+      item_name: itemName.trim(),
+      quantity: quantity.trim() ? parseFloat(quantity.trim()) : null,
+      measuringUnit: normalizeUnit(measuringUnit) || null,
+      category: category.trim() || null,
+      expiration_date: expirationDate.trim() || null,
     });
 
     setSaving(false);
@@ -119,10 +140,11 @@ export default function PantryScreen() {
     } else {
       setModalVisible(false);
       resetForm();
-      fetchItems(); // refresh the list
+      fetchItems();
     }
   };
 
+  // ── Delete item ────────────────────────────────────────────────────────────
   const handleDeleteItem = async (id) => {
     const { error } = await supabase
       .from('pantry_items')
@@ -136,49 +158,82 @@ export default function PantryScreen() {
     }
   };
 
-  const getExpiryStatus = (dateStr) => {
-    if (!dateStr) return { label: 'No expiry', color: '#aaa' };
-    const today = new Date();
-    const expiry = new Date(dateStr);
-    const daysLeft = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    if (daysLeft < 0) return { label: 'Expired', color: '#e53935' };
-    if (daysLeft <= 3) return { label: `Expires in ${daysLeft}d`, color: '#FB8C00' };
-    if (daysLeft <= 7) return { label: `Expires in ${daysLeft}d`, color: '#FDD835' };
-    return { label: `Expires ${expiry.toLocaleDateString()}`, color: '#43A047' };
+  // ── Edit item ──────────────────────────────────────────────────────────────
+  const handleEditPress = (item) => {
+    setEditingItem(item);
+    setItemName(item.item_name || '');
+    setQuantity(item.quantity ? String(item.quantity) : '');
+    setMeasuringUnit(item.measuringUnit || '');
+    setCategory(item.category || '');
+    setExpirationDate(item.expiration_date || '');
+    setEditModalVisible(true);
   };
 
+  const handleUpdateItem = async () => {
+    if (!itemName.trim()) {
+      Alert.alert('Missing Info', 'Please enter an item name.');
+      return;
+    }
 
+    setSaving(true);
+
+    const { error } = await supabase
+      .from('pantry_items')
+      .update({
+        item_name: itemName.trim(),
+        quantity: quantity ? parseFloat(quantity) : null,
+        measuringUnit: normalizeUnit(measuringUnit) || null,
+        category: category || null,
+        expiration_date: expirationDate || null,
+      })
+      .eq('id', editingItem.id);
+
+    setSaving(false);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setEditModalVisible(false);
+      setEditingItem(null);
+      resetForm();
+      fetchItems();
+    }
+  };
+
+  // ── Render each pantry card ────────────────────────────────────────────────
   const renderItem = ({ item }) => {
     const expiry = getExpiryStatus(item.expiration_date);
     return (
-      <SwipeableRow onDelete={() => handleDeleteItem(item.id)}>
+      <SwipeableRow
+        onDelete={() => handleDeleteItem(item.id)}
+        onEdit={() => handleEditPress(item)}
+      >
+        {/* Single card — removed the accidental double-nested card */}
         <View style={styles.card}>
-          <View style={styles.card}>
-            <View style={styles.imageContainer}>
-              {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={styles.image} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderText}>🛒</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.content}>
-              <Text style={styles.itemName}>{item.item_name}</Text>
-              {item.category && (
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{item.category}</Text>
-                </View>
-              )}
-              <View style={styles.row}>
-                <View style={styles.quantityBox}>
-                  <Text style={styles.quantityNumber}>{item.quantity}</Text>
-                  <Text style={styles.quantityUnit}>{item.measuringUnit ?? item.measuring_unit}</Text>
-                </View>
-                <View style={[styles.expiryBadge, { borderColor: expiry.color }]}>
-                  <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
-                  <Text style={[styles.expiryText, { color: expiry.color }]}>{expiry.label}</Text>
-                </View>
+          <View style={styles.imageContainer}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.image} />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Text style={styles.imagePlaceholderText}>🛒</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.content}>
+            <Text style={styles.itemName}>{item.item_name}</Text>
+            {item.category && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+            )}
+            <View style={styles.row}>
+              <View style={styles.quantityBox}>
+                <Text style={styles.quantityNumber}>{item.quantity}</Text>
+                <Text style={styles.quantityUnit}>{item.measuringUnit ?? item.measuring_unit}</Text>
+              </View>
+              <View style={[styles.expiryBadge, { borderColor: expiry.color }]}>
+                <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
+                <Text style={[styles.expiryText, { color: expiry.color }]}>{expiry.label}</Text>
               </View>
             </View>
           </View>
@@ -187,6 +242,87 @@ export default function PantryScreen() {
     );
   };
 
+  // ── Form fields shared between add and edit modals ─────────────────────────
+  const renderFormFields = () => (
+    <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+
+      <Text style={styles.label}>Item Name <Text style={styles.required}>*</Text></Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Chicken Breast"
+        placeholderTextColor="#aaa"
+        value={itemName}
+        onChangeText={setItemName}
+      />
+
+      <View style={styles.rowInputs}>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Text style={styles.label}>Quantity</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 2"
+            placeholderTextColor="#aaa"
+            keyboardType="decimal-pad"
+            value={quantity}
+            onChangeText={setQuantity}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Unit</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. kg"
+            placeholderTextColor="#aaa"
+            value={measuringUnit}
+            onChangeText={setMeasuringUnit}
+          />
+        </View>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+        {UNITS.map((u) => {
+          const isSelected = normalizeUnit(measuringUnit) === normalizeUnit(u);
+          return (
+            <TouchableOpacity
+              key={u}
+              style={[styles.chip, isSelected && styles.chipActive]}
+              onPress={() => setMeasuringUnit(u)}
+            >
+              <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{u}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      <Text style={styles.label}>Expiration Date</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="YYYY-MM-DD"
+        placeholderTextColor="#aaa"
+        value={expirationDate}
+        onChangeText={setExpirationDate}
+        keyboardType="numbers-and-punctuation"
+      />
+
+      <Text style={styles.label}>Category</Text>
+      <View style={styles.categoryGrid}>
+        {CATEGORIES.map((cat) => (
+          <TouchableOpacity
+            key={cat}
+            style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
+            onPress={() => setCategory(cat)}
+          >
+            <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
+              {cat}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+    </ScrollView>
+  );
+
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -196,6 +332,7 @@ export default function PantryScreen() {
     );
   }
 
+  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
 
@@ -205,7 +342,7 @@ export default function PantryScreen() {
         <Text style={styles.headerSubtitle}>{items.length} items stored</Text>
       </View>
 
-      {/* List */}
+      {/* List or empty state */}
       {items.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyIcon}>🧺</Text>
@@ -218,7 +355,9 @@ export default function PantryScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4CAF50" />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4CAF50" />
+          }
         />
       )}
 
@@ -227,115 +366,48 @@ export default function PantryScreen() {
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
 
-      {/* Add Item Modal */}
+      {/* ── Add Item Modal ── */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => { setModalVisible(false); resetForm(); }}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <SafeAreaView style={styles.modalContainer}>
-
-            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => { setModalVisible(false); resetForm(); }}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Add Item</Text>
               <TouchableOpacity onPress={handleAddItem} disabled={saving}>
-                {saving
-                  ? <ActivityIndicator color="#4CAF50" />
-                  : <Text style={styles.saveText}>Save</Text>
-                }
+                {saving ? <ActivityIndicator color="#4CAF50" /> : <Text style={styles.saveText}>Save</Text>}
               </TouchableOpacity>
             </View>
+            {renderFormFields()}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
 
-            <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-
-              {/* Item Name */}
-              <Text style={styles.label}>Item Name <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Chicken Breast"
-                placeholderTextColor="#aaa"
-                value={itemName}
-                onChangeText={setItemName}
-              />
-
-              {/* Quantity + Unit side by side */}
-              <View style={styles.rowInputs}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.label}>Quantity</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. 2"
-                    placeholderTextColor="#aaa"
-                    keyboardType="decimal-pad"
-                    value={quantity}
-                    onChangeText={setQuantity}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Unit</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. kg"
-                    placeholderTextColor="#aaa"
-                    value={measuringUnit}
-                    onChangeText={setMeasuringUnit}
-                  />
-                </View>
-              </View>
-
-              {/* Quick Unit Selector */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                {UNITS.map((u) => {
-                  const isSelected = normalizeUnit(measuringUnit) === normalizeUnit(u);
-
-                  return (
-                    <TouchableOpacity
-                      key={u}
-                      style={[styles.chip, isSelected && styles.chipActive]}
-                      onPress={() => setMeasuringUnit(u)}
-                    >
-                      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{u}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* Expiration Date */}
-              <Text style={styles.label}>Expiration Date</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#aaa"
-                value={expirationDate}
-                onChangeText={setExpirationDate}
-                keyboardType="numbers-and-punctuation"
-              />
-
-              {/* Category */}
-              <Text style={styles.label}>Category</Text>
-              <View style={styles.categoryGrid}>
-                {CATEGORIES.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
-                    onPress={() => setCategory(cat)}
-                  >
-                    <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-            </ScrollView>
+      {/* ── Edit Item Modal ── */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setEditModalVisible(false); setEditingItem(null); resetForm(); }}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => { setEditModalVisible(false); setEditingItem(null); resetForm(); }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Edit Item</Text>
+              <TouchableOpacity onPress={handleUpdateItem} disabled={saving}>
+                {saving ? <ActivityIndicator color="#4CAF50" /> : <Text style={styles.saveText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+            {renderFormFields()}
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
@@ -344,6 +416,7 @@ export default function PantryScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7F2' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -388,7 +461,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 20, fontWeight: '700', color: '#1B3A1F' },
   emptySubtext: { fontSize: 14, color: '#7A9A7E', marginTop: 6 },
 
-  // Floating Button
+  // Floating button
   fab: {
     position: 'absolute', bottom: 28, right: 24,
     width: 58, height: 58, borderRadius: 29,
@@ -397,6 +470,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
   fabIcon: { fontSize: 32, color: '#fff', lineHeight: 36 },
+
+  // Swipe actions
+  swipeActions: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  editAction: {
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 16,
+    marginRight: 6,
+    gap: 4,
+  },
+  deleteAction: {
+    backgroundColor: '#e53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 16,
+    gap: 4,
+  },
+  actionIcon: { fontSize: 20 },
+  actionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: '#F5F7F2' },
@@ -410,7 +508,10 @@ const styles = StyleSheet.create({
   saveText: { fontSize: 15, color: '#4CAF50', fontWeight: '700' },
   modalBody: { padding: 20, paddingBottom: 60 },
 
-  label: { fontSize: 13, fontWeight: '600', color: '#1B3A1F', marginBottom: 6, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.4 },
+  label: {
+    fontSize: 13, fontWeight: '600', color: '#1B3A1F',
+    marginBottom: 6, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.4,
+  },
   required: { color: '#e53935' },
   input: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14,
@@ -418,7 +519,6 @@ const styles = StyleSheet.create({
   },
   rowInputs: { flexDirection: 'row' },
 
-  // Unit chips
   chipRow: { marginTop: 10, marginBottom: 4 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
@@ -428,7 +528,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, color: '#555', fontWeight: '500' },
   chipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Category grid
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   categoryChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
@@ -437,22 +536,4 @@ const styles = StyleSheet.create({
   categoryChipActive: { backgroundColor: '#EEF3EB', borderColor: '#4CAF50' },
   categoryChipText: { fontSize: 13, color: '#555', fontWeight: '500' },
   categoryChipTextActive: { color: '#4CAF50', fontWeight: '700' },
-deleteAction: {
-    backgroundColor: '#e53935',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    borderRadius: 16,
-    marginBottom: 12,
-    gap: 4,
-  },
-  deleteIcon: {
-    fontSize: 20,
-  },
-  deleteText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
 });
