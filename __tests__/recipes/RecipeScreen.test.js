@@ -144,7 +144,7 @@ describe('RecipeScreen', () => {
     jest.restoreAllMocks();
   });
 
-  test('fetches and displays a list of recipes', async () => {
+  test('loads recommended recipes for the signed in user', async () => {
     const { findByText } = render(<RecipeScreen />);
 
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
@@ -153,16 +153,17 @@ describe('RecipeScreen', () => {
     expect(getRecipeRecommendations).toHaveBeenCalledWith('test-user-id', {
       minMatch: 0.0,
     });
+    expect(mockLimit).not.toHaveBeenCalled();
   });
 
-  test('opens a recipe modal when a recipe is pressed', async () => {
+  test('opens a recipe modal and loads recipe ingredients', async () => {
     const { findByText, getByText, getAllByText } = render(<RecipeScreen />);
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
 
     await waitFor(() => {
       expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
+      expect(mockIngredientsSelect).toHaveBeenCalledWith('quantity, unit, ingredient_name');
     });
 
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
@@ -172,11 +173,10 @@ describe('RecipeScreen', () => {
     expect(getByText(/save to profile/i)).toBeTruthy();
   });
 
-  test('saves the selected recipe to the user profile', async () => {
+  test('saves an opened recipe to the signed in user profile', async () => {
     const { findByText, getByText } = render(<RecipeScreen />);
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
     fireEvent.press(getByText(/save to profile/i));
 
     await waitFor(() => {
@@ -184,9 +184,13 @@ describe('RecipeScreen', () => {
       expect(mockInsert).toHaveBeenCalled();
     });
 
-    const insertedPayload = mockInsert.mock.calls[0][0];
-    expect(JSON.stringify(insertedPayload)).toContain('test-user-id');
-    expect(JSON.stringify(insertedPayload)).toContain('Chicken Rice Bowl');
+    expect(mockInsert.mock.calls[0][0]).toEqual([
+      expect.objectContaining({
+        recipe_id: 1,
+        recipe_title: 'Chicken Rice Bowl',
+        user_id: 'test-user-id',
+      }),
+    ]);
   });
 
   test('shows an alert when saving a recipe fails', async () => {
@@ -199,8 +203,7 @@ describe('RecipeScreen', () => {
 
     const { findByText, getByText } = render(<RecipeScreen />);
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
     fireEvent.press(getByText(/save to profile/i));
 
     await waitFor(() => {

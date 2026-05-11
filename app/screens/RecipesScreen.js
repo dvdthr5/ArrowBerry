@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
 import { getRecipeRecommendations } from '../../lib/recommendations';
+import { supabase } from '../../lib/supabase';
 
 function RecipeCard({ recipe, onPress }) {
   return (
@@ -32,6 +32,29 @@ export default function RecipesScreen() {
   const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
   const [sessionSavedIds, setSessionSavedIds] = useState({});
+
+  function getRecipeId(recipe) {
+    return recipe?.recipe_id || recipe?.id;
+  }
+
+  function normalizeShoppingItemName(value) {
+    if (!value) return '';
+    return value.trim().toLowerCase().replace(/\s+/g, '');
+  }
+
+  function getMissingIngredientQuantity(ingredientName) {
+    const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
+      normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
+    ));
+
+    if (!matchingIngredient?.quantity) {
+      return null;
+    }
+
+    const numericQuantity = Number(matchingIngredient.quantity);
+    return Number.isNaN(numericQuantity) ? null : numericQuantity;
+  }
+
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
 
@@ -46,7 +69,7 @@ async function handleRecipePress(recipe){
     const { data, error } = await supabase
       .from('recipe_ingredients')
       .select('quantity, unit, ingredient_name')
-      .eq('recipe_id', recipe.id);
+      .eq('recipe_id', getRecipeId(recipe));
 
     if (error) {
       console.error('Failed to fetch recipe ingredients', error.message);
@@ -70,10 +93,10 @@ async function handleRecipePress(recipe){
     }
 
     const { error } = await supabase.from('saved_recipes').insert([
-      { 
-        user_id: userData.user.id, 
-        recipe_id: recipe.id,
-        recipe_title: recipe.title 
+      {
+        user_id: userData.user.id,
+        recipe_id: getRecipeId(recipe),
+        recipe_title: recipe.title,
       }
     ]);
 
@@ -83,6 +106,82 @@ async function handleRecipePress(recipe){
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
+
+  async function handleAddMissingIngredients(recipe) {
+    if (!recipe?.missing_list || recipe.missing_list.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'This recipe does not have any missing ingredients to add.');
+    }
+
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !userData?.user) {
+      return Alert.alert('Error', 'You must be logged in to add shopping list items.');
+    }
+
+    const shoppingItems = recipe.missing_list
+      .map((ingredient) => ({
+        user_id: userData.user.id,
+        item_name: ingredient.ingredient_name,
+        quantity: getMissingIngredientQuantity(ingredient.ingredient_name),
+        checked: false,
+      }))
+      .filter((ingredient) => ingredient.item_name);
+
+    if (shoppingItems.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'There are no valid missing ingredients to add.');
+    }
+
+    const { data: existingItems, error: fetchError } = await supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', userData.user.id);
+
+    if (fetchError) {
+      return Alert.alert('Failed to Add Ingredients', fetchError.message);
+    }
+
+    const inserts = [];
+    const updates = [];
+
+    shoppingItems.forEach((shoppingItem) => {
+      const matchingItem = (existingItems || []).find((existingItem) => (
+        normalizeShoppingItemName(existingItem.item_name) === normalizeShoppingItemName(shoppingItem.item_name)
+      ));
+
+      if (matchingItem) {
+        updates.push({
+          id: matchingItem.id,
+          quantity: (Number(matchingItem.quantity) || 0) + (Number(shoppingItem.quantity) || 0),
+        });
+      } else {
+        inserts.push(shoppingItem);
+      }
+    });
+
+    const updateResults = await Promise.all(updates.map((item) => (
+      supabase
+        .from('shopping_list')
+        .update({ quantity: item.quantity || null })
+        .eq('id', item.id)
+    )));
+
+    const updateError = updateResults.find((result) => result.error)?.error;
+
+    if (updateError) {
+      return Alert.alert('Failed to Add Ingredients', updateError.message);
+    }
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('shopping_list').insert(inserts);
+
+      if (error) {
+        return Alert.alert('Failed to Add Ingredients', error.message);
+      }
+    }
+
+    Alert.alert('Added to Shopping List', 'Missing ingredients were added to your shopping list.');
+  }
+
   function formatRecipeInstructions(instructions){
     if (!instructions){
       return '';
@@ -171,7 +270,7 @@ async function fetchRecipes() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {recipe.recipe_id}
+                  key = {getRecipeId(recipe)}
                   recipe = {recipe}
                   onPress = {handleRecipePress}
                 />
@@ -251,13 +350,20 @@ async function fetchRecipes() {
                   </ScrollView>
 
                   {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
-                  <View style={{ marginTop: 15 }}>
+                  <View style={{ marginTop: 15, gap: 10 }}>
                     <Button 
-                      title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
-                      color={sessionSavedIds[selectedRecipe.id] ? "gray" : "#28a745"} 
-                      disabled={sessionSavedIds[selectedRecipe.id]}
+                      title={sessionSavedIds[getRecipeId(selectedRecipe)] ? "Saved to Profile" : "Save to Profile"} 
+                      color={sessionSavedIds[getRecipeId(selectedRecipe)] ? "gray" : "#28a745"} 
+                      disabled={sessionSavedIds[getRecipeId(selectedRecipe)]}
                       onPress={() => handleSaveRecipe(selectedRecipe)} 
                     />
+                    {!!selectedRecipe.missing_list?.length && (
+                      <Button
+                        title="Add Missing Ingredients to Shopping List"
+                        color="#2e7d32"
+                        onPress={() => handleAddMissingIngredients(selectedRecipe)}
+                      />
+                    )}
                   </View>
                 </>
               )}

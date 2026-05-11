@@ -59,6 +59,12 @@ export default function PantryScreen() {
   // Add modal
   const [modalVisible, setModalVisible] = useState(false);
 
+  // Shopping list modal
+  const [shoppingModalVisible, setShoppingModalVisible] = useState(false);
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [shoppingItemName, setShoppingItemName] = useState('');
+  const [shoppingQuantity, setShoppingQuantity] = useState('');
+
   // Edit modal — these must be INSIDE the component
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -84,9 +90,39 @@ export default function PantryScreen() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  const fetchShoppingItems = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  const onRefresh = () => { setRefreshing(true); fetchItems(); };
+    if (!user) {
+      setShoppingItems([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+
+    if (error) console.error('Error fetching shopping list:', error.message);
+    else setShoppingItems(data || []);
+  };
+
+  const handleOpenShoppingList = async () => {
+    await fetchShoppingItems();
+    setShoppingModalVisible(true);
+  };
+
+  useEffect(() => {
+    fetchItems();
+    fetchShoppingItems();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchItems();
+    fetchShoppingItems();
+  };
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const resetForm = () => {
@@ -97,7 +133,17 @@ export default function PantryScreen() {
     setExpirationDate('');
   };
 
+  const resetShoppingForm = () => {
+    setShoppingItemName('');
+    setShoppingQuantity('');
+  };
+
   const normalizeUnit = (value) => {
+    if (!value) return '';
+    return value.trim().toLowerCase().replace(/\s+/g, '');
+  };
+
+  const normalizeShoppingItemName = (value) => {
     if (!value) return '';
     return value.trim().toLowerCase().replace(/\s+/g, '');
   };
@@ -141,6 +187,93 @@ export default function PantryScreen() {
       setModalVisible(false);
       resetForm();
       fetchItems();
+    }
+  };
+
+  // ── Shopping list ──────────────────────────────────────────────────────────
+  const handleAddShoppingItem = async () => {
+    if (!shoppingItemName.trim()) {
+      Alert.alert('Missing Info', 'Please enter a shopping list item.');
+      return;
+    }
+
+    setSaving(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const newItemName = shoppingItemName.trim();
+    const newItemQuantity = shoppingQuantity.trim() ? parseFloat(shoppingQuantity.trim()) : null;
+    const normalizedNewItemName = normalizeShoppingItemName(newItemName);
+
+    const { data: existingItems, error: fetchError } = await supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (fetchError) {
+      setSaving(false);
+      Alert.alert('Error', fetchError.message);
+      return;
+    }
+
+    const matchingItem = (existingItems || []).find((item) => (
+      normalizeShoppingItemName(item.item_name) === normalizedNewItemName
+    ));
+
+    let error;
+
+    if (matchingItem) {
+      const updatedQuantity = (Number(matchingItem.quantity) || 0) + (Number(newItemQuantity) || 0);
+      ({ error } = await supabase
+        .from('shopping_list')
+        .update({ quantity: updatedQuantity || null })
+        .eq('id', matchingItem.id));
+    } else {
+      ({ error } = await supabase.from('shopping_list').insert({
+        user_id: user.id,
+        item_name: newItemName,
+        quantity: newItemQuantity,
+        checked: false,
+      }));
+    }
+
+    setSaving(false);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      resetShoppingForm();
+      fetchShoppingItems();
+    }
+  };
+
+  const handleToggleShoppingItem = async (item) => {
+    const nextCheckedValue = !item.checked;
+
+    const { error } = await supabase
+      .from('shopping_list')
+      .update({ checked: nextCheckedValue })
+      .eq('id', item.id);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setShoppingItems((prev) => prev.map((shoppingItem) => (
+        shoppingItem.id === item.id ? { ...shoppingItem, checked: nextCheckedValue } : shoppingItem
+      )));
+    }
+  };
+
+  const handleDeleteShoppingItem = async (id) => {
+    const { error } = await supabase
+      .from('shopping_list')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setShoppingItems((prev) => prev.filter((item) => item.id !== id));
     }
   };
 
@@ -322,6 +455,30 @@ export default function PantryScreen() {
     </ScrollView>
   );
 
+  const renderShoppingItem = (item) => {
+    const quantityText = item.quantity ? String(item.quantity) : '';
+
+    return (
+      <View key={item.id} style={styles.shoppingLine}>
+        <TouchableOpacity
+          style={[styles.shoppingCheckbox, item.checked && styles.shoppingCheckboxActive]}
+          onPress={() => handleToggleShoppingItem(item)}
+        >
+          {item.checked && <View style={styles.shoppingCheckboxDot} />}
+        </TouchableOpacity>
+        <View style={styles.shoppingLineTextContainer}>
+          <Text style={[styles.shoppingItemText, item.checked && styles.shoppingItemTextChecked]}>
+            {item.item_name}
+          </Text>
+          {quantityText ? <Text style={styles.shoppingQuantityText}>{quantityText}</Text> : null}
+        </View>
+        <TouchableOpacity onPress={() => handleDeleteShoppingItem(item.id)}>
+          <Text style={styles.shoppingDeleteText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -361,7 +518,10 @@ export default function PantryScreen() {
         />
       )}
 
-      {/* Floating + Button */}
+      {/* Floating Buttons */}
+      <TouchableOpacity style={styles.shoppingFab} onPress={handleOpenShoppingList}>
+        <Text style={styles.shoppingFabText}>List</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
@@ -385,6 +545,56 @@ export default function PantryScreen() {
               </TouchableOpacity>
             </View>
             {renderFormFields()}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Shopping List Modal ── */}
+      <Modal
+        visible={shoppingModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setShoppingModalVisible(false); resetShoppingForm(); }}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => { setShoppingModalVisible(false); resetShoppingForm(); }}>
+                <Text style={styles.cancelText}>Close</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Shopping List</Text>
+              <TouchableOpacity onPress={handleAddShoppingItem} disabled={saving}>
+                {saving ? <ActivityIndicator color="#4CAF50" /> : <Text style={styles.saveText}>Add</Text>}
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.shoppingPaper} keyboardShouldPersistTaps="handled">
+              <View style={styles.shoppingInputRow}>
+                <TextInput
+                  style={styles.shoppingNameInput}
+                  placeholder="Item"
+                  placeholderTextColor="#9C8F7A"
+                  value={shoppingItemName}
+                  onChangeText={setShoppingItemName}
+                />
+                <TextInput
+                  style={styles.shoppingSmallInput}
+                  placeholder="Qty"
+                  placeholderTextColor="#9C8F7A"
+                  keyboardType="decimal-pad"
+                  value={shoppingQuantity}
+                  onChangeText={setShoppingQuantity}
+                />
+              </View>
+
+              {shoppingItems.length === 0 ? (
+                <View style={styles.shoppingEmptyContainer}>
+                  <Text style={styles.shoppingEmptyText}>No shopping list items yet.</Text>
+                </View>
+              ) : (
+                shoppingItems.map(renderShoppingItem)
+              )}
+            </ScrollView>
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
@@ -470,7 +680,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
   fabIcon: { fontSize: 32, color: '#fff', lineHeight: 36 },
-
+  shoppingFab: {
+    position: 'absolute', bottom: 96, right: 24,
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: '#4CAF50', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
+  },
+  shoppingFabText: { fontSize: 14, color: '#fff', fontWeight: '800' },
   // Swipe actions
   swipeActions: {
     flexDirection: 'row',
@@ -536,4 +753,94 @@ const styles = StyleSheet.create({
   categoryChipActive: { backgroundColor: '#EEF3EB', borderColor: '#4CAF50' },
   categoryChipText: { fontSize: 13, color: '#555', fontWeight: '500' },
   categoryChipTextActive: { color: '#4CAF50', fontWeight: '700' },
+
+  shoppingPaper: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 60,
+    backgroundColor: '#FFFDF4',
+    flexGrow: 1,
+  },
+  shoppingInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#B7D7F0',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  shoppingNameInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1B3A1F',
+    paddingVertical: 8,
+  },
+  shoppingSmallInput: {
+    width: 72,
+    fontSize: 15,
+    color: '#1B3A1F',
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
+  shoppingLine: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#B7D7F0',
+    paddingVertical: 6,
+  },
+  shoppingCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  shoppingCheckboxActive: {
+    backgroundColor: '#E7F3E7',
+  },
+  shoppingCheckboxDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4CAF50',
+  },
+  shoppingLineTextContainer: {
+    flex: 1,
+  },
+  shoppingItemText: {
+    fontSize: 16,
+    color: '#1B3A1F',
+    fontWeight: '600',
+  },
+  shoppingItemTextChecked: {
+    color: '#8A8A8A',
+    textDecorationLine: 'line-through',
+  },
+  shoppingQuantityText: {
+    fontSize: 12,
+    color: '#7A9A7E',
+    marginTop: 2,
+  },
+  shoppingDeleteText: {
+    fontSize: 12,
+    color: '#e53935',
+    fontWeight: '700',
+    paddingLeft: 10,
+  },
+  shoppingEmptyContainer: {
+    minHeight: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shoppingEmptyText: {
+    color: '#9C8F7A',
+    fontSize: 15,
+    fontWeight: '500',
+  },
 });
