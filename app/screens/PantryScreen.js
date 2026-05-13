@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -84,7 +85,11 @@ export default function PantryScreen() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchItems();
+    }, [])
+  );
 
   const onRefresh = () => { setRefreshing(true); fetchItems(); };
 
