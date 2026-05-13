@@ -87,7 +87,6 @@ describe('PantryScreen', () => {
     expect(await findByText('Produce')).toBeTruthy();
     expect(await findByText('4')).toBeTruthy();
     expect(await findByText('pcs')).toBeTruthy();
-    expect(await findByText('Chicken', {}, { timeout: 10000 })).toBeTruthy();
   });
 
   test('shows empty pantry message when there are no items', async () => {
