@@ -3,6 +3,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
+import { NavigationContainer } from '@react-navigation/native';
 import PantryScreen from '../../app/screens/PantryScreen';
 import { supabase } from '../../lib/supabase';
 
@@ -76,12 +77,17 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText } = render(<PantryScreen />);
+    const { findByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText('Apples')).toBeTruthy();
     expect(await findByText('Produce')).toBeTruthy();
     expect(await findByText('4')).toBeTruthy();
     expect(await findByText('pcs')).toBeTruthy();
+    expect(await findByText('Chicken', {}, { timeout: 10000 })).toBeTruthy();
   });
 
   test('shows empty pantry message when there are no items', async () => {
@@ -90,7 +96,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText } = render(<PantryScreen />);
+    const { findByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
     expect(await findByText(/tap \+ to add your first item/i)).toBeTruthy();
@@ -102,7 +112,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText } = render(<PantryScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
@@ -130,7 +144,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText, getByPlaceholderText } = render(<PantryScreen />);
+    const { findByText, getByText, getByPlaceholderText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
@@ -168,7 +186,11 @@ describe('PantryScreen', () => {
       },
     });
 
-    const { findByText, getByText, getByPlaceholderText } = render(<PantryScreen />);
+    const { findByText, getByText, getByPlaceholderText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
@@ -202,7 +224,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText, queryByText } = render(<PantryScreen />);
+    const { findByText, getByText, queryByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText('Apples')).toBeTruthy();
 
@@ -237,7 +263,11 @@ describe('PantryScreen', () => {
       },
     });
 
-    const { findByText, getByText } = render(<PantryScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText('Apples')).toBeTruthy();
 
