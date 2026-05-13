@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
@@ -120,9 +121,12 @@ async function handleRecipePress(recipe){
     return uniqueLines.join('\n');
   }
 
-  useEffect(() => {
-      fetchRecipes(); 
-    }, []);
+  // rerun the algorithm for recommendations
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecipes();
+    }, [])
+  );
 
 async function fetchRecipes() {
     setLoading(true);
