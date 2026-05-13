@@ -80,7 +80,6 @@ async function handleRecipePress(recipe){
     if (error) {
       Alert.alert("Failed to save", error.message);
     } else {
-      // --- ADD THIS LINE TO FIX THE WARNING ---
       setSessionSavedIds(prev => ({ ...prev, [recipe.id]: true }));
       
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
@@ -260,7 +259,6 @@ async function fetchRecipes() {
                     )}
                   </ScrollView>
 
-                  {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
                   <View style={{ marginTop: 15 }}>
                     <Button 
                       title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 

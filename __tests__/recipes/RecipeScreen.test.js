@@ -1,6 +1,6 @@
+import { NavigationContainer } from '@react-navigation/native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-
 import RecipeScreen from '../../app/screens/RecipesScreen';
 import { getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
@@ -145,7 +145,11 @@ describe('RecipeScreen', () => {
   });
 
   test('fetches and displays a list of recipes', async () => {
-    const { findByText } = render(<RecipeScreen />);
+    const { findByText } = render(
+      <NavigationContainer>
+        <RecipesScreen />
+      </NavigationContainer>
+    );render(<RecipeScreen />);
 
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
@@ -156,7 +160,11 @@ describe('RecipeScreen', () => {
   });
 
   test('opens a recipe modal when a recipe is pressed', async () => {
-    const { findByText, getByText, getAllByText } = render(<RecipeScreen />);
+    const { findByText, getByText, getAllByText } = render(
+      <NavigationContainer>
+        <RecipesScreen />
+      </NavigationContainer>
+    );render(<RecipeScreen />);
 
     const recipeCard = await findByText('Chicken Rice Bowl');
     fireEvent.press(recipeCard);
@@ -173,7 +181,11 @@ describe('RecipeScreen', () => {
   });
 
   test('saves the selected recipe to the user profile', async () => {
-    const { findByText, getByText } = render(<RecipeScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipesScreen />
+      </NavigationContainer>
+    );render(<RecipeScreen />);
 
     const recipeCard = await findByText('Chicken Rice Bowl');
     fireEvent.press(recipeCard);
@@ -197,7 +209,11 @@ describe('RecipeScreen', () => {
       },
     });
 
-    const { findByText, getByText } = render(<RecipeScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipesScreen />
+      </NavigationContainer>
+    );render(<RecipeScreen />);
 
     const recipeCard = await findByText('Chicken Rice Bowl');
     fireEvent.press(recipeCard);
