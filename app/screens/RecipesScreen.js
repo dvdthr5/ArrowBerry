@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { getRecipeRecommendations } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
@@ -126,30 +125,33 @@ async function handleRecipePress(recipe){
     }, []);
 
 async function fetchRecipes() {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Session:', session?.user?.id);
-
-    if (!session?.user?.id) {
-      console.log('No session - user not logged in');
+    setLoading(true);
+    
+    // Get the current user ID
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !userData?.user) {
+      console.error("User not logged in");
       setLoading(false);
       return;
     }
 
-    console.log('Calling RPC for user:', session.user.id);
-    const results = await getRecipeRecommendations(session.user.id, {
-      minMatch: 0.0,
+    // Call your new smart SQL function instead of a basic fetch!
+    const { data, error } = await supabase.rpc('recommend_recipes', {
+      p_user_id: userData.user.id,
+      p_limit: 20,
+      p_min_match: 0.0 // Set to 0 to show recipes even if pantry is empty, let allergens filter
     });
-    console.log('RPC returned', results.length, 'recipes');
-    console.log('First recipe:', results[0]);
 
-    setRecipes(results);
-  } catch (err) {
-    console.error('Error fetching recipes:', err);
-  } finally {
+    if (error) {
+      console.error("Algorithm error:", error.message);
+      setRecipes([]);
+    } else {
+      setRecipes(data || []);
+    }
+    
     setLoading(false);
   }
-}
 
   return (
     <View style={styles.container}>
