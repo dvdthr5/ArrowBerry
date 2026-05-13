@@ -138,7 +138,7 @@ def format_instructions(value: Any) -> str | None:
     return "\n\n".join(f"{index}. {step}" for index, step in enumerate(steps, start=1))
 
 
-# --- NEW: Allergen and Dietary Tag Generator ---
+# --- Allergen and Dietary Tag Generator ---
 def generate_dietary_tags(ingredients_list: list[Any]) -> dict[str, bool]:
     if not ingredients_list:
         return {
@@ -195,7 +195,7 @@ def recipe_to_row(recipe: dict[str, Any]) -> dict[str, Any] | None:
     if not title or not source:
         return None
 
-    # --- NEW: Extract ingredients and generate tags ---
+    # --- Extract ingredients and generate tags ---
     raw_ingredients = recipe.get("ingredients") or recipe.get("recipeIngredient") or []
     if isinstance(raw_ingredients, str):
         raw_ingredients = [raw_ingredients]
