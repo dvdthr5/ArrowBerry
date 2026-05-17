@@ -1,7 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
 function RecipeCard({ recipe, onPress }) {
@@ -205,15 +204,10 @@ async function handleRecipePress(recipe){
     if (error) {
       Alert.alert("Failed to save", error.message);
     } else {
-<<<<<<< HEAD
       setSessionSavedIds((previousSavedIds) => ({
         ...previousSavedIds,
         [getRecipeId(recipe)]: true,
       }));
-=======
-      setSessionSavedIds(prev => ({ ...prev, [recipe.id]: true }));
-      
->>>>>>> b76ad04e6222b289ba952309df24d4e52f00fa0b
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
