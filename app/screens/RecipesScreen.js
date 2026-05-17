@@ -204,6 +204,10 @@ async function handleRecipePress(recipe){
     if (error) {
       Alert.alert("Failed to save", error.message);
     } else {
+      setSessionSavedIds((previousSavedIds) => ({
+        ...previousSavedIds,
+        [getRecipeId(recipe)]: true,
+      }));
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
