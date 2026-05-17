@@ -64,6 +64,7 @@ export default function PantryScreen() {
   const [shoppingItems, setShoppingItems] = useState([]);
   const [shoppingItemName, setShoppingItemName] = useState('');
   const [shoppingQuantity, setShoppingQuantity] = useState('');
+  const [shoppingUnit, setShoppingUnit] = useState('');
 
   // Edit modal — these must be INSIDE the component
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -136,6 +137,7 @@ export default function PantryScreen() {
   const resetShoppingForm = () => {
     setShoppingItemName('');
     setShoppingQuantity('');
+    setShoppingUnit('');
   };
 
   const normalizeUnit = (value) => {
@@ -146,6 +148,26 @@ export default function PantryScreen() {
   const normalizeShoppingItemName = (value) => {
     if (!value) return '';
     return value.trim().toLowerCase().replace(/\s+/g, '');
+  };
+
+  const formatShoppingQuantity = (value) => {
+    if (value == null || value === '') return '';
+
+    const numericValue = Number(value);
+    if (Number.isNaN(numericValue)) return String(value);
+
+    return Number.isInteger(numericValue) ? String(numericValue) : String(numericValue);
+  };
+
+  const formatShoppingAmount = (item) => {
+    const amount = formatShoppingQuantity(item.quantity);
+    const unit = item.unit || item.measuringUnit || item.measurement_unit || '';
+
+    if (!amount) {
+      return '';
+    }
+
+    return unit ? `${amount} ${unit}` : amount;
   };
 
   const getExpiryStatus = (dateStr) => {
@@ -203,6 +225,7 @@ export default function PantryScreen() {
 
     const newItemName = shoppingItemName.trim();
     const newItemQuantity = shoppingQuantity.trim() ? parseFloat(shoppingQuantity.trim()) : null;
+    const newItemUnit = normalizeUnit(shoppingUnit) || null;
     const normalizedNewItemName = normalizeShoppingItemName(newItemName);
 
     const { data: existingItems, error: fetchError } = await supabase
@@ -224,15 +247,21 @@ export default function PantryScreen() {
 
     if (matchingItem) {
       const updatedQuantity = (Number(matchingItem.quantity) || 0) + (Number(newItemQuantity) || 0);
+      const existingUnit = matchingItem.unit || matchingItem.measuringUnit || matchingItem.measurement_unit || null;
+
       ({ error } = await supabase
         .from('shopping_list')
-        .update({ quantity: updatedQuantity || null })
+        .update({
+          quantity: updatedQuantity || null,
+          unit: existingUnit || newItemUnit,
+        })
         .eq('id', matchingItem.id));
     } else {
       ({ error } = await supabase.from('shopping_list').insert({
         user_id: user.id,
         item_name: newItemName,
         quantity: newItemQuantity,
+        unit: newItemUnit,
         checked: false,
       }));
     }
@@ -456,11 +485,12 @@ export default function PantryScreen() {
   );
 
   const renderShoppingItem = (item) => {
-    const quantityText = item.quantity ? String(item.quantity) : '';
+    const quantityText = formatShoppingAmount(item);
 
     return (
       <View key={item.id} style={styles.shoppingLine}>
         <TouchableOpacity
+          testID={`shopping-checkbox-${item.id}`}
           style={[styles.shoppingCheckbox, item.checked && styles.shoppingCheckboxActive]}
           onPress={() => handleToggleShoppingItem(item)}
         >
@@ -563,7 +593,7 @@ export default function PantryScreen() {
                 <Text style={styles.cancelText}>Close</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Shopping List</Text>
-              <TouchableOpacity onPress={handleAddShoppingItem} disabled={saving}>
+              <TouchableOpacity testID="shopping-add-button" onPress={handleAddShoppingItem} disabled={saving}>
                 {saving ? <ActivityIndicator color="#4CAF50" /> : <Text style={styles.saveText}>Add</Text>}
               </TouchableOpacity>
             </View>
@@ -584,6 +614,13 @@ export default function PantryScreen() {
                   keyboardType="decimal-pad"
                   value={shoppingQuantity}
                   onChangeText={setShoppingQuantity}
+                />
+                <TextInput
+                  style={styles.shoppingSmallInput}
+                  placeholder="Unit"
+                  placeholderTextColor="#9C8F7A"
+                  value={shoppingUnit}
+                  onChangeText={setShoppingUnit}
                 />
               </View>
 

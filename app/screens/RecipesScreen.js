@@ -55,6 +55,99 @@ export default function RecipesScreen() {
     return Number.isNaN(numericQuantity) ? null : numericQuantity;
   }
 
+  function getMissingIngredientUnit(ingredientName) {
+  const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
+    normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
+  ));
+
+  return matchingIngredient?.unit || null;
+}
+
+  // Helper: Normalize a recipe ingredient object to a standard shape
+  function normalizeRecipeIngredient(ingredient) {
+    if (!ingredient) {
+      return null;
+    }
+
+    if (typeof ingredient === 'string') {
+      return {
+        ingredient_name: ingredient,
+        quantity: null,
+        unit: '',
+      };
+    }
+
+    const ingredientName = ingredient.ingredient_name
+      || ingredient.ingredientName
+      || ingredient.name
+      || ingredient.item_name
+      || ingredient.title;
+
+    if (!ingredientName) {
+      return null;
+    }
+
+    return {
+      ingredient_name: ingredientName,
+      quantity: ingredient.quantity ?? ingredient.amount ?? null,
+      unit: ingredient.measurement_unit
+        ?? ingredient.measurementUnit
+        ?? ingredient.measuringUnit
+        ?? ingredient.unit
+        ?? ingredient.unit_name
+        ?? '',
+    };
+  }
+
+  // Helper: Get a fallback list of normalized ingredients from a recipe object
+  function getRecipeIngredientFallback(recipe) {
+    const possibleIngredientLists = [
+      recipe?.ingredients,
+      recipe?.ingredient_list,
+      recipe?.ingredients_list,
+      recipe?.matched_list,
+      recipe?.missing_list,
+    ];
+
+    return possibleIngredientLists
+      .filter(Array.isArray)
+      .flat()
+      .map(normalizeRecipeIngredient)
+      .filter(Boolean);
+  }
+
+  // Helper: Format the quantity, removing trailing .0 for integers
+  function formatIngredientQuantity(quantity) {
+    if (quantity == null || quantity === '') {
+      return '';
+    }
+
+    const numericQuantity = Number(quantity);
+
+    if (Number.isNaN(numericQuantity)) {
+      return String(quantity);
+    }
+
+    return Number.isInteger(numericQuantity)
+      ? String(numericQuantity)
+      : String(numericQuantity).replace(/\.0+$/, '');
+  }
+
+  // Helper: Format ingredient amount for display (quantity + unit)
+  function formatIngredientAmount(ingredient) {
+    return [
+      formatIngredientQuantity(ingredient.quantity),
+      ingredient.unit,
+    ]
+      .filter((value) => value != null && String(value).trim() !== '')
+      .join(' ');
+  }
+
+  // Helper: Format ingredient name for display
+  function formatIngredientName(ingredient) {
+    return ingredient.ingredient_name || '';
+  }
+
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
 
@@ -64,21 +157,29 @@ export default function RecipesScreen() {
   }
 
 async function handleRecipePress(recipe){
-    setSelectedRecipe(recipe);
+  const fallbackIngredients = getRecipeIngredientFallback(recipe);
 
-    const { data, error } = await supabase
-      .from('recipe_ingredients')
-      .select('quantity, unit, ingredient_name')
-      .eq('recipe_id', getRecipeId(recipe));
+  setSelectedRecipe(recipe);
+  setSelectedRecipeIngredients(fallbackIngredients);
 
-    if (error) {
-      console.error('Failed to fetch recipe ingredients', error.message);
-      setSelectedRecipeIngredients([]);
-      return;
-    }
+  const { data, error } = await supabase
+    .from('recipe_ingredients')
+    .select('ingredient_name, quantity, unit')
+    .eq('recipe_id', getRecipeId(recipe));
 
-    setSelectedRecipeIngredients(data || []);
+  if (error) {
+    console.error('Failed to fetch recipe ingredients', error.message);
+    return;
   }
+
+  const normalizedIngredients = (data || [])
+    .map(normalizeRecipeIngredient)
+    .filter(Boolean);
+
+  console.log('Recipe ingredients fetched:', normalizedIngredients);
+
+  setSelectedRecipeIngredients(normalizedIngredients.length ? normalizedIngredients : fallbackIngredients);
+}
 
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
@@ -123,6 +224,7 @@ async function handleRecipePress(recipe){
         user_id: userData.user.id,
         item_name: ingredient.ingredient_name,
         quantity: getMissingIngredientQuantity(ingredient.ingredient_name),
+        unit: getMissingIngredientUnit(ingredient.ingredient_name),
         checked: false,
       }))
       .filter((ingredient) => ingredient.item_name);
@@ -310,14 +412,19 @@ async function fetchRecipes() {
                       <View style={styles.ingredientsSection}>
                         <Text style={styles.recipeDetailsText}>Ingredients:</Text>
                         {selectedRecipeIngredients.map((ingredient, index) => {
-                          const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
-                            .filter(Boolean)
-                            .join(' ');
+                          const ingredientAmount = formatIngredientAmount(ingredient);
+                          const ingredientName = formatIngredientName(ingredient);
 
                           return (
-                            <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
-                              • {ingredientLine}
-                            </Text>
+                            <View key={`${ingredientName}-${index}`} style={styles.ingredientRow}>
+                              <Text style={styles.ingredientBullet}>•</Text>
+                              <Text style={styles.ingredientAmount}>
+                                {ingredientAmount || '—'}
+                              </Text>
+                              <Text style={styles.ingredientName}>
+                                {ingredientName}
+                              </Text>
+                            </View>
                           );
                         })}
                       </View>
@@ -470,6 +577,30 @@ const styles = StyleSheet.create({
   },
   ingredientsSection: {
     marginBottom: 12,
+  },
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  ingredientBullet: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginRight: 6,
+    color: '#111',
+  },
+  ingredientAmount: {
+    width: 70,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#111',
+  },
+  ingredientName: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#111',
   },
   modalCloseButton: {
     paddingVertical: 8, 

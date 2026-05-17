@@ -19,7 +19,12 @@ const mockRecipeData = [
     match_percentage: 1,
     matched_ingredients: 2,
     total_ingredients: 2,
-    missing_list: [],
+    missing_list: [
+      {
+        ingredient_name: 'rice',
+        is_core: true,
+      },
+    ],
   },
   {
     id: 2,
@@ -48,6 +53,16 @@ const mockIngredientsSelect = jest.fn(() => ({
 }));
 const mockInsert = jest.fn();
 
+const mockShoppingEq = jest.fn();
+const mockShoppingSelect = jest.fn(() => ({
+  eq: mockShoppingEq,
+}));
+const mockShoppingInsert = jest.fn();
+const mockShoppingUpdateEq = jest.fn();
+const mockShoppingUpdate = jest.fn(() => ({
+  eq: mockShoppingUpdateEq,
+}));
+
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
@@ -71,6 +86,14 @@ jest.mock('../../lib/supabase', () => ({
       if (table === 'saved_recipes') {
         return {
           insert: mockInsert,
+        };
+      }
+
+      if (table === 'shopping_list') {
+        return {
+          select: mockShoppingSelect,
+          insert: mockShoppingInsert,
+          update: mockShoppingUpdate,
         };
       }
 
@@ -134,6 +157,21 @@ describe('RecipeScreen', () => {
       error: null,
     });
 
+    mockShoppingEq.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockShoppingUpdateEq.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
     mockInsert.mockResolvedValue({
       data: null,
       error: null,
@@ -163,14 +201,42 @@ describe('RecipeScreen', () => {
 
     await waitFor(() => {
       expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
-      expect(mockIngredientsSelect).toHaveBeenCalledWith('quantity, unit, ingredient_name');
+      expect(mockIngredientsSelect).toHaveBeenCalledWith('ingredient_name, quantity, unit');
     });
 
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
     expect(getAllByText(/rice/i).length).toBeGreaterThan(0);
     expect(getAllByText(/chicken/i).length).toBeGreaterThan(0);
+    expect(getAllByText('1 cup').length).toBeGreaterThan(0);
+    expect(getAllByText('1 lb').length).toBeGreaterThan(0);
     expect(getAllByText(/cook rice/i).length).toBeGreaterThan(0);
     expect(getByText(/save to profile/i)).toBeTruthy();
+  });
+
+  test('adds missing recipe ingredients to the shopping list with quantity and unit', async () => {
+    const { findByText, getByText } = render(<RecipeScreen />);
+
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
+
+    await waitFor(() => {
+      expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
+    });
+
+    fireEvent.press(getByText(/add missing ingredients/i));
+
+    await waitFor(() => {
+      expect(mockShoppingSelect).toHaveBeenCalledWith('*');
+      expect(mockShoppingEq).toHaveBeenCalledWith('user_id', 'test-user-id');
+      expect(mockShoppingInsert).toHaveBeenCalledWith([
+        expect.objectContaining({
+          user_id: 'test-user-id',
+          item_name: 'rice',
+          quantity: 1,
+          unit: 'cup',
+          checked: false,
+        }),
+      ]);
+    });
   });
 
   test('saves an opened recipe to the signed in user profile', async () => {
