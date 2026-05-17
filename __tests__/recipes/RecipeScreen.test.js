@@ -1,8 +1,7 @@
+import { NavigationContainer } from '@react-navigation/native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-
 import RecipeScreen from '../../app/screens/RecipesScreen';
-import { getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
 const mockRecipeData = [
@@ -10,10 +9,7 @@ const mockRecipeData = [
     id: 1,
     recipe_id: 1,
     title: 'Chicken Rice Bowl',
-    name: 'Chicken Rice Bowl',
-    recipe_name: 'Chicken Rice Bowl',
     description: 'A simple chicken and rice recipe.',
-    ingredients: 'chicken, rice, broccoli',
     instructions: '1. Cook rice. 2. Cook chicken. 3. Combine and serve.',
     image_url: null,
     match_percentage: 1,
@@ -30,10 +26,7 @@ const mockRecipeData = [
     id: 2,
     recipe_id: 2,
     title: 'Pasta Salad',
-    name: 'Pasta Salad',
-    recipe_name: 'Pasta Salad',
     description: 'A quick pasta salad.',
-    ingredients: 'pasta, tomato, olive oil',
     instructions: '1. Cook pasta. 2. Mix ingredients.',
     image_url: null,
     match_percentage: 0.5,
@@ -52,6 +45,7 @@ const mockIngredientsSelect = jest.fn(() => ({
   eq: mockEq,
 }));
 const mockInsert = jest.fn();
+const mockRpc = jest.fn(); // Added RPC mock
 
 const mockShoppingEq = jest.fn();
 const mockShoppingSelect = jest.fn(() => ({
@@ -70,6 +64,7 @@ jest.mock('../../lib/supabase', () => ({
       getSession: jest.fn(),
       signOut: jest.fn(),
     },
+    rpc: jest.fn(), // Ensure RPC is mocked
     from: jest.fn((table) => {
       if (table === 'recipes') {
         return {
@@ -105,54 +100,26 @@ jest.mock('../../lib/supabase', () => ({
   },
 }));
 
-jest.mock('../../lib/recommendations', () => ({
-  getRecipeRecommendations: jest.fn(),
-}));
-
 describe('RecipeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
     supabase.auth.getUser.mockResolvedValue({
-      data: {
-        user: {
-          id: 'test-user-id',
-        },
-      },
+      data: { user: { id: 'test-user-id' } },
       error: null,
     });
 
-    supabase.auth.getSession.mockResolvedValue({
-      data: {
-        session: {
-          user: {
-            id: 'test-user-id',
-          },
-        },
-      },
-      error: null,
-    });
-
-    getRecipeRecommendations.mockResolvedValue(mockRecipeData);
-
-    mockLimit.mockResolvedValue({
+    // Mock the new recommendation RPC call
+    supabase.rpc.mockResolvedValue({
       data: mockRecipeData,
       error: null,
     });
 
     mockEq.mockResolvedValue({
       data: [
-        {
-          quantity: '1',
-          unit: 'cup',
-          ingredient_name: 'rice',
-        },
-        {
-          quantity: '1',
-          unit: 'lb',
-          ingredient_name: 'chicken',
-        },
+        { quantity: '1', unit: 'cup', ingredient_name: 'rice' },
+        { quantity: '1', unit: 'lb', ingredient_name: 'chicken' },
       ],
       error: null,
     });
@@ -187,9 +154,12 @@ describe('RecipeScreen', () => {
 
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
-    expect(supabase.auth.getSession).toHaveBeenCalled();
-    expect(getRecipeRecommendations).toHaveBeenCalledWith('test-user-id', {
-      minMatch: 0.0,
+    
+    // Check for the RPC call instead of the old library call
+    expect(supabase.rpc).toHaveBeenCalledWith('recommend_recipes', {
+      p_user_id: 'test-user-id',
+      p_limit: 20,
+      p_min_match: 0.0
     });
     expect(mockLimit).not.toHaveBeenCalled();
   });

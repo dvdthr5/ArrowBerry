@@ -31,15 +31,32 @@ export default function ProfileScreen() {
         if (authData?.user) {
           setEmail(authData.user.email);
           
-          // Fetch real saved recipes from database
-          const { data: recipes, error } = await supabase
+          // 1. Fetch real saved recipes
+          const { data: recipes } = await supabase
             .from('saved_recipes')
             .select('*')
             .eq('user_id', authData.user.id)
             .order('created_at', { ascending: false });
             
-          if (!error && recipes) {
-            setSavedRecipes(recipes);
+          if (recipes) setSavedRecipes(recipes);
+
+          // 2. NEW: Fetch dietary preferences and update the switches
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('user_id', authData.user.id)
+            .single();
+
+          if (profileData) {
+            setDietary({
+              halal: profileData.halal || false,
+              vegetarian: profileData.vegetarian || false,
+              vegan: profileData.vegan || false,
+              kosher: profileData.kosher || false,
+              nutAllergy: profileData.nut_allergy || false,
+              dairyAllergy: profileData.dairy_allergy || false,
+              glutenFree: profileData.gluten_free || false,
+            });
           }
         }
         setFetchingRecipes(false);
@@ -120,8 +137,35 @@ export default function ProfileScreen() {
     await supabase.auth.signOut();
   };
 
-  const toggleDietary = (key) => {
-    setDietary(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleDietary = async (key) => {
+    // Optimistic UI update: flip the switch immediately for a snappy feel
+    const newValue = !dietary[key];
+    setDietary(prev => ({ ...prev, [key]: newValue }));
+
+    // Map the camelCase frontend keys to the snake_case database columns
+    const dbKeyMap = {
+      halal: 'halal', vegetarian: 'vegetarian', vegan: 'vegan',
+      kosher: 'kosher', nutAllergy: 'nut_allergy', 
+      dairyAllergy: 'dairy_allergy', glutenFree: 'gluten_free'
+    };
+
+    // Save to the database
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData?.user) {
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert({ 
+          user_id: authData.user.id, 
+          [dbKeyMap[key]]: newValue 
+        });
+
+      if (error) {
+        console.error("Error saving preference:", error.message);
+        Alert.alert("Error", "Could not save preference.");
+        // Revert switch if database fails
+        setDietary(prev => ({ ...prev, [key]: !newValue })); 
+      }
+    }
   };
 
   const formatLabel = (key) => {
