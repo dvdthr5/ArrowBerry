@@ -150,7 +150,11 @@ describe('RecipeScreen', () => {
   });
 
   test('loads recommended recipes for the signed in user', async () => {
-    const { findByText } = render(<RecipeScreen />);
+    const { findByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
 
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
@@ -165,7 +169,11 @@ describe('RecipeScreen', () => {
   });
 
   test('opens a recipe modal and loads recipe ingredients', async () => {
-    const { findByText, getByText, getAllByText } = render(<RecipeScreen />);
+    const { findByText, getByText, getAllByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
 
     fireEvent.press(await findByText('Chicken Rice Bowl'));
 
@@ -184,7 +192,11 @@ describe('RecipeScreen', () => {
   });
 
   test('adds missing recipe ingredients to the shopping list with quantity and unit', async () => {
-    const { findByText, getByText } = render(<RecipeScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
 
     fireEvent.press(await findByText('Chicken Rice Bowl'));
 
@@ -210,7 +222,11 @@ describe('RecipeScreen', () => {
   });
 
   test('saves an opened recipe to the signed in user profile', async () => {
-    const { findByText, getByText } = render(<RecipeScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
 
     fireEvent.press(await findByText('Chicken Rice Bowl'));
     fireEvent.press(getByText(/save to profile/i));
@@ -237,7 +253,11 @@ describe('RecipeScreen', () => {
       },
     });
 
-    const { findByText, getByText } = render(<RecipeScreen />);
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
 
     fireEvent.press(await findByText('Chicken Rice Bowl'));
     fireEvent.press(getByText(/save to profile/i));
