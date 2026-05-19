@@ -157,36 +157,6 @@ export default function RecipesScreen() {
   }
   // -----------------------
 
-  async function submitReview() {
-    if (userRating === 0) return Alert.alert("Hold on!", "Please select a star rating first.");
-    
-    setSubmittingReview(true);
-    const { data: userData } = await supabase.auth.getUser();
-    
-    if (userData?.user && reviewRecipe) {
-      const { error } = await supabase
-        .from('recipe_reviews')
-        .upsert({ 
-          user_id: userData.user.id, 
-          recipe_id: reviewRecipe.id,
-          rating: userRating,
-          review_text: userReviewText.trim()
-        }, { onConflict: 'user_id, recipe_id' });
-
-      if (error) {
-        Alert.alert("Failed to submit review", error.message);
-      } else {
-        Alert.alert("Success!", "Your review has been posted.");
-        // Refresh reviews list
-        handleOpenReviews(reviewRecipe); 
-        // Refresh average ratings in the background
-        fetchRecipes(); 
-      }
-    }
-    setSubmittingReview(false);
-  }
-  // -----------------------
-
   async function handleRecipePress(recipe){
     setSelectedRecipe(recipe);
     const { data, error } = await supabase
