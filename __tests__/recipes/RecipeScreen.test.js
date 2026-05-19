@@ -15,7 +15,12 @@ const mockRecipeData = [
     match_percentage: 1,
     matched_ingredients: 2,
     total_ingredients: 2,
-    missing_list: [],
+    missing_list: [
+      {
+        ingredient_name: 'rice',
+        is_core: true,
+      },
+    ],
   },
   {
     id: 2,
@@ -42,6 +47,16 @@ const mockIngredientsSelect = jest.fn(() => ({
 const mockInsert = jest.fn();
 const mockRpc = jest.fn(); // Added RPC mock
 
+const mockShoppingEq = jest.fn();
+const mockShoppingSelect = jest.fn(() => ({
+  eq: mockShoppingEq,
+}));
+const mockShoppingInsert = jest.fn();
+const mockShoppingUpdateEq = jest.fn();
+const mockShoppingUpdate = jest.fn(() => ({
+  eq: mockShoppingUpdateEq,
+}));
+
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
@@ -51,10 +66,36 @@ jest.mock('../../lib/supabase', () => ({
     },
     rpc: jest.fn(), // Ensure RPC is mocked
     from: jest.fn((table) => {
-      if (table === 'recipes') return { select: mockRecipesSelect };
-      if (table === 'recipe_ingredients') return { select: mockIngredientsSelect };
-      if (table === 'saved_recipes') return { insert: mockInsert };
-      return { select: jest.fn(), insert: jest.fn() };
+      if (table === 'recipes') {
+        return {
+          select: mockRecipesSelect,
+        };
+      }
+
+      if (table === 'recipe_ingredients') {
+        return {
+          select: mockIngredientsSelect,
+        };
+      }
+
+      if (table === 'saved_recipes') {
+        return {
+          insert: mockInsert,
+        };
+      }
+
+      if (table === 'shopping_list') {
+        return {
+          select: mockShoppingSelect,
+          insert: mockShoppingInsert,
+          update: mockShoppingUpdate,
+        };
+      }
+
+      return {
+        select: jest.fn(),
+        insert: jest.fn(),
+      };
     }),
   },
 }));
@@ -83,10 +124,32 @@ describe('RecipeScreen', () => {
       error: null,
     });
 
-    mockInsert.mockResolvedValue({ data: null, error: null });
+    mockShoppingEq.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockShoppingUpdateEq.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
   });
 
-  test('fetches and displays a list of recipes', async () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('loads recommended recipes for the signed in user', async () => {
     const { findByText } = render(
       <NavigationContainer>
         <RecipeScreen />
@@ -102,35 +165,70 @@ describe('RecipeScreen', () => {
       p_limit: 20,
       p_min_match: 0.0
     });
+    expect(mockLimit).not.toHaveBeenCalled();
   });
 
-  test('opens a recipe modal when a recipe is pressed', async () => {
+  test('opens a recipe modal and loads recipe ingredients', async () => {
     const { findByText, getByText, getAllByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
 
     await waitFor(() => {
       expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
+      expect(mockIngredientsSelect).toHaveBeenCalledWith('ingredient_name, quantity, unit');
     });
 
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
+    expect(getAllByText(/rice/i).length).toBeGreaterThan(0);
+    expect(getAllByText(/chicken/i).length).toBeGreaterThan(0);
+    expect(getAllByText('1 cup').length).toBeGreaterThan(0);
+    expect(getAllByText('1 lb').length).toBeGreaterThan(0);
+    expect(getAllByText(/cook rice/i).length).toBeGreaterThan(0);
     expect(getByText(/save to profile/i)).toBeTruthy();
   });
 
-  test('saves the selected recipe to the user profile', async () => {
+  test('adds missing recipe ingredients to the shopping list with quantity and unit', async () => {
     const { findByText, getByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
+
+    await waitFor(() => {
+      expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
+    });
+
+    fireEvent.press(getByText(/add missing ingredients/i));
+
+    await waitFor(() => {
+      expect(mockShoppingSelect).toHaveBeenCalledWith('*');
+      expect(mockShoppingEq).toHaveBeenCalledWith('user_id', 'test-user-id');
+      expect(mockShoppingInsert).toHaveBeenCalledWith([
+        expect.objectContaining({
+          user_id: 'test-user-id',
+          item_name: 'rice',
+          quantity: 1,
+          unit: 'cup',
+          checked: false,
+        }),
+      ]);
+    });
+  });
+
+  test('saves an opened recipe to the signed in user profile', async () => {
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
+
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
     fireEvent.press(getByText(/save to profile/i));
 
     await waitFor(() => {
@@ -138,8 +236,37 @@ describe('RecipeScreen', () => {
       expect(mockInsert).toHaveBeenCalled();
     });
 
-    const insertedPayload = mockInsert.mock.calls[0][0][0];
-    expect(insertedPayload.user_id).toBe('test-user-id');
-    expect(insertedPayload.recipe_title).toBe('Chicken Rice Bowl');
+    expect(mockInsert.mock.calls[0][0]).toEqual([
+      expect.objectContaining({
+        recipe_id: 1,
+        recipe_title: 'Chicken Rice Bowl',
+        user_id: 'test-user-id',
+      }),
+    ]);
+  });
+
+  test('shows an alert when saving a recipe fails', async () => {
+    mockInsert.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Save failed',
+      },
+    });
+
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
+
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
+    fireEvent.press(getByText(/save to profile/i));
+
+    await waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringMatching(/save failed/i)
+      );
+    });
   });
 });
