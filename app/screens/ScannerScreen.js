@@ -3,6 +3,8 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Button, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
+const CATEGORIES = ['Produce', 'Dairy', 'Meat', 'Seafood', 'Grains', 'Frozen', 'Snacks', 'Beverages', 'Condiments', 'Other'];
+
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraActive, setCameraActive] = useState(true);
@@ -66,7 +68,24 @@ const analyzeReceipt = async () => {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: "Extract food items and quantities from this receipt. Return ONLY a valid JSON array of objects with keys 'item_name' and 'quantity'. No markdown formatting." },
+              { 
+                text: `You are a grocery receipt parser. Extract all food items from this receipt and return ONLY a valid JSON array. No markdown, no explanation, just the raw JSON array.
+
+              Today's date is ${new Date().toISOString().split('T')[0]}.
+
+              For each item return an object with these exact keys:
+              - "item_name": string, the name of the food item
+              - "quantity": integer only, the whole number amount (round any decimals, default to 1 if unclear)
+              - "measuringUnit": string, the unit (g, kg, oz, lb, ml, L, tsp, tbsp, cup, pcs, pack — pick the most appropriate, default to "pcs" if unclear)
+              - "category": string, must be exactly one of: Produce, Dairy, Meat, Seafood, Grains, Frozen, Snacks, Beverages, Condiments, Other
+              - "expiration_date": string in YYYY-MM-DD format, estimate based on today's date how long this item typically lasts (e.g. fresh milk ~7 days, chicken ~2 days, canned goods ~365 days, bread ~7 days, fresh produce ~5 days)
+
+              Example output:
+              [
+                {"item_name":"Whole Milk","quantity":1,"measuringUnit":"L","category":"Dairy","expiration_date":"2026-05-20"},
+                {"item_name":"Chicken Breast","quantity":2,"measuringUnit":"lb","category":"Meat","expiration_date":"2026-05-15"}
+              ]`
+              },
               { 
                 inlineData: { // camelCase for gemini api
                   mimeType: "image/jpeg", 
@@ -120,7 +139,10 @@ const analyzeReceipt = async () => {
       const insertData = parsedItems.map(item => ({
         user_id: userData.user.id,
         item_name: item.item_name,
-        quantity: String(item.quantity)
+        quantity: Math.round(Number(item.quantity)) || 1,
+        measuringUnit: item.measuringUnit || 'pcs',
+        category: CATEGORIES.includes(item.category) ? item.category : 'Other',
+        expiration_date: item.expiration_date || null,
       }));
 
       const { error: dbError } = await supabase.from('pantry_items').insert(insertData);
