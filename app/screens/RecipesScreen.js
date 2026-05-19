@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { getRecipeRecommendations } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
@@ -32,6 +32,122 @@ export default function RecipesScreen() {
   const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
   const [sessionSavedIds, setSessionSavedIds] = useState({});
+
+  function getRecipeId(recipe) {
+    return recipe?.recipe_id || recipe?.id;
+  }
+
+  function normalizeShoppingItemName(value) {
+    if (!value) return '';
+    return value.trim().toLowerCase().replace(/\s+/g, '');
+  }
+
+  function getMissingIngredientQuantity(ingredientName) {
+    const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
+      normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
+    ));
+
+    if (!matchingIngredient?.quantity) {
+      return null;
+    }
+
+    const numericQuantity = Number(matchingIngredient.quantity);
+    return Number.isNaN(numericQuantity) ? null : numericQuantity;
+  }
+
+  function getMissingIngredientUnit(ingredientName) {
+  const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
+    normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
+  ));
+
+  return matchingIngredient?.unit || null;
+}
+
+  // Helper: Normalize a recipe ingredient object to a standard shape
+  function normalizeRecipeIngredient(ingredient) {
+    if (!ingredient) {
+      return null;
+    }
+
+    if (typeof ingredient === 'string') {
+      return {
+        ingredient_name: ingredient,
+        quantity: null,
+        unit: '',
+      };
+    }
+
+    const ingredientName = ingredient.ingredient_name
+      || ingredient.ingredientName
+      || ingredient.name
+      || ingredient.item_name
+      || ingredient.title;
+
+    if (!ingredientName) {
+      return null;
+    }
+
+    return {
+      ingredient_name: ingredientName,
+      quantity: ingredient.quantity ?? ingredient.amount ?? null,
+      unit: ingredient.measurement_unit
+        ?? ingredient.measurementUnit
+        ?? ingredient.measuringUnit
+        ?? ingredient.unit
+        ?? ingredient.unit_name
+        ?? '',
+    };
+  }
+
+  // Helper: Get a fallback list of normalized ingredients from a recipe object
+  function getRecipeIngredientFallback(recipe) {
+    const possibleIngredientLists = [
+      recipe?.ingredients,
+      recipe?.ingredient_list,
+      recipe?.ingredients_list,
+      recipe?.matched_list,
+      recipe?.missing_list,
+    ];
+
+    return possibleIngredientLists
+      .filter(Array.isArray)
+      .flat()
+      .map(normalizeRecipeIngredient)
+      .filter(Boolean);
+  }
+
+  // Helper: Format the quantity, removing trailing .0 for integers
+  function formatIngredientQuantity(quantity) {
+    if (quantity == null || quantity === '') {
+      return '';
+    }
+
+    const numericQuantity = Number(quantity);
+
+    if (Number.isNaN(numericQuantity)) {
+      return String(quantity);
+    }
+
+    return Number.isInteger(numericQuantity)
+      ? String(numericQuantity)
+      : String(numericQuantity).replace(/\.0+$/, '');
+  }
+
+  // Helper: Format ingredient amount for display (quantity + unit)
+  function formatIngredientAmount(ingredient) {
+    return [
+      formatIngredientQuantity(ingredient.quantity),
+      ingredient.unit,
+    ]
+      .filter((value) => value != null && String(value).trim() !== '')
+      .join(' ');
+  }
+
+  // Helper: Format ingredient name for display
+  function formatIngredientName(ingredient) {
+    return ingredient.ingredient_name || '';
+  }
+
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
 
@@ -41,21 +157,29 @@ export default function RecipesScreen() {
   }
 
 async function handleRecipePress(recipe){
-    setSelectedRecipe(recipe);
+  const fallbackIngredients = getRecipeIngredientFallback(recipe);
 
-    const { data, error } = await supabase
-      .from('recipe_ingredients')
-      .select('quantity, unit, ingredient_name')
-      .eq('recipe_id', recipe.id);
+  setSelectedRecipe(recipe);
+  setSelectedRecipeIngredients(fallbackIngredients);
 
-    if (error) {
-      console.error('Failed to fetch recipe ingredients', error.message);
-      setSelectedRecipeIngredients([]);
-      return;
-    }
+  const { data, error } = await supabase
+    .from('recipe_ingredients')
+    .select('ingredient_name, quantity, unit')
+    .eq('recipe_id', getRecipeId(recipe));
 
-    setSelectedRecipeIngredients(data || []);
+  if (error) {
+    console.error('Failed to fetch recipe ingredients', error.message);
+    return;
   }
+
+  const normalizedIngredients = (data || [])
+    .map(normalizeRecipeIngredient)
+    .filter(Boolean);
+
+  console.log('Recipe ingredients fetched:', normalizedIngredients);
+
+  setSelectedRecipeIngredients(normalizedIngredients.length ? normalizedIngredients : fallbackIngredients);
+}
 
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
@@ -70,19 +194,100 @@ async function handleRecipePress(recipe){
     }
 
     const { error } = await supabase.from('saved_recipes').insert([
-      { 
-        user_id: userData.user.id, 
-        recipe_id: recipe.id,
-        recipe_title: recipe.title 
+      {
+        user_id: userData.user.id,
+        recipe_id: getRecipeId(recipe),
+        recipe_title: recipe.title,
       }
     ]);
 
     if (error) {
       Alert.alert("Failed to save", error.message);
     } else {
+      setSessionSavedIds((previousSavedIds) => ({
+        ...previousSavedIds,
+        [getRecipeId(recipe)]: true,
+      }));
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
+
+  async function handleAddMissingIngredients(recipe) {
+    if (!recipe?.missing_list || recipe.missing_list.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'This recipe does not have any missing ingredients to add.');
+    }
+
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !userData?.user) {
+      return Alert.alert('Error', 'You must be logged in to add shopping list items.');
+    }
+
+    const shoppingItems = recipe.missing_list
+      .map((ingredient) => ({
+        user_id: userData.user.id,
+        item_name: ingredient.ingredient_name,
+        quantity: getMissingIngredientQuantity(ingredient.ingredient_name),
+        unit: getMissingIngredientUnit(ingredient.ingredient_name),
+        checked: false,
+      }))
+      .filter((ingredient) => ingredient.item_name);
+
+    if (shoppingItems.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'There are no valid missing ingredients to add.');
+    }
+
+    const { data: existingItems, error: fetchError } = await supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', userData.user.id);
+
+    if (fetchError) {
+      return Alert.alert('Failed to Add Ingredients', fetchError.message);
+    }
+
+    const inserts = [];
+    const updates = [];
+
+    shoppingItems.forEach((shoppingItem) => {
+      const matchingItem = (existingItems || []).find((existingItem) => (
+        normalizeShoppingItemName(existingItem.item_name) === normalizeShoppingItemName(shoppingItem.item_name)
+      ));
+
+      if (matchingItem) {
+        updates.push({
+          id: matchingItem.id,
+          quantity: (Number(matchingItem.quantity) || 0) + (Number(shoppingItem.quantity) || 0),
+        });
+      } else {
+        inserts.push(shoppingItem);
+      }
+    });
+
+    const updateResults = await Promise.all(updates.map((item) => (
+      supabase
+        .from('shopping_list')
+        .update({ quantity: item.quantity || null })
+        .eq('id', item.id)
+    )));
+
+    const updateError = updateResults.find((result) => result.error)?.error;
+
+    if (updateError) {
+      return Alert.alert('Failed to Add Ingredients', updateError.message);
+    }
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('shopping_list').insert(inserts);
+
+      if (error) {
+        return Alert.alert('Failed to Add Ingredients', error.message);
+      }
+    }
+
+    Alert.alert('Added to Shopping List', 'Missing ingredients were added to your shopping list.');
+  }
+
   function formatRecipeInstructions(instructions){
     if (!instructions){
       return '';
@@ -121,35 +326,41 @@ async function handleRecipePress(recipe){
     return uniqueLines.join('\n');
   }
 
-  useEffect(() => {
-      fetchRecipes(); 
-    }, []);
+  // rerun the algorithm for recommendations
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecipes();
+    }, [])
+  );
 
 async function fetchRecipes() {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Session:', session?.user?.id);
-
-    if (!session?.user?.id) {
-      console.log('No session - user not logged in');
+    setLoading(true);
+    
+    // Get the current user ID
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !userData?.user) {
+      console.error("User not logged in");
       setLoading(false);
       return;
     }
 
-    console.log('Calling RPC for user:', session.user.id);
-    const results = await getRecipeRecommendations(session.user.id, {
-      minMatch: 0.0,
+    // Call your new smart SQL function instead of a basic fetch!
+    const { data, error } = await supabase.rpc('recommend_recipes', {
+      p_user_id: userData.user.id,
+      p_limit: 20,
+      p_min_match: 0.0 // Set to 0 to show recipes even if pantry is empty, let allergens filter
     });
-    console.log('RPC returned', results.length, 'recipes');
-    console.log('First recipe:', results[0]);
 
-    setRecipes(results);
-  } catch (err) {
-    console.error('Error fetching recipes:', err);
-  } finally {
+    if (error) {
+      console.error("Algorithm error:", error.message);
+      setRecipes([]);
+    } else {
+      setRecipes(data || []);
+    }
+    
     setLoading(false);
   }
-}
 
   return (
     <View style={styles.container}>
@@ -171,7 +382,7 @@ async function fetchRecipes() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {recipe.recipe_id}
+                  key = {getRecipeId(recipe)}
                   recipe = {recipe}
                   onPress = {handleRecipePress}
                 />
@@ -211,14 +422,19 @@ async function fetchRecipes() {
                       <View style={styles.ingredientsSection}>
                         <Text style={styles.recipeDetailsText}>Ingredients:</Text>
                         {selectedRecipeIngredients.map((ingredient, index) => {
-                          const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
-                            .filter(Boolean)
-                            .join(' ');
+                          const ingredientAmount = formatIngredientAmount(ingredient);
+                          const ingredientName = formatIngredientName(ingredient);
 
                           return (
-                            <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
-                              • {ingredientLine}
-                            </Text>
+                            <View key={`${ingredientName}-${index}`} style={styles.ingredientRow}>
+                              <Text style={styles.ingredientBullet}>•</Text>
+                              <Text style={styles.ingredientAmount}>
+                                {ingredientAmount || '—'}
+                              </Text>
+                              <Text style={styles.ingredientName}>
+                                {ingredientName}
+                              </Text>
+                            </View>
                           );
                         })}
                       </View>
@@ -251,13 +467,20 @@ async function fetchRecipes() {
                   </ScrollView>
 
                   {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
-                  <View style={{ marginTop: 15 }}>
+                  <View style={{ marginTop: 15, gap: 10 }}>
                     <Button 
-                      title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
-                      color={sessionSavedIds[selectedRecipe.id] ? "gray" : "#28a745"} 
-                      disabled={sessionSavedIds[selectedRecipe.id]}
+                      title={sessionSavedIds[getRecipeId(selectedRecipe)] ? "Saved to Profile" : "Save to Profile"} 
+                      color={sessionSavedIds[getRecipeId(selectedRecipe)] ? "gray" : "#28a745"} 
+                      disabled={sessionSavedIds[getRecipeId(selectedRecipe)]}
                       onPress={() => handleSaveRecipe(selectedRecipe)} 
                     />
+                    {!!selectedRecipe.missing_list?.length && (
+                      <Button
+                        title="Add Missing Ingredients to Shopping List"
+                        color="#2e7d32"
+                        onPress={() => handleAddMissingIngredients(selectedRecipe)}
+                      />
+                    )}
                   </View>
                 </>
               )}
@@ -364,6 +587,30 @@ const styles = StyleSheet.create({
   },
   ingredientsSection: {
     marginBottom: 12,
+  },
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  ingredientBullet: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginRight: 6,
+    color: '#111',
+  },
+  ingredientAmount: {
+    width: 70,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#111',
+  },
+  ingredientName: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#111',
   },
   modalCloseButton: {
     paddingVertical: 8, 
