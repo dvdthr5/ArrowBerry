@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { getRecipeRecommendations } from '../../lib/recommendations';
+import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
     <Pressable style={styles.recipeCard} onPress={() => onPress(recipe)}>
       <Text style={styles.recipeCardTitle}>{recipe.title}</Text>
-      <Text style={styles.recipeMatchBadge}>
-        {Math.round(recipe.match_percentage * 100)}% match
-        {' • '}
-        {recipe.matched_ingredients}/{recipe.total_ingredients} ingredients
-      </Text>
+      {recipe.total_ingredients > 0 && (
+        <Text style={styles.recipeMatchBadge}>
+          {Math.round(recipe.match_percentage * 100)}% match
+          {' • '}
+          {recipe.matched_ingredients}/{recipe.total_ingredients} ingredients
+        </Text>
+      )}
       {!!recipe.description && (
         <Text style={styles.recipeCardDescription}>{recipe.description}</Text>
       )}
@@ -32,6 +34,10 @@ export default function RecipesScreen() {
   const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
   const [sessionSavedIds, setSessionSavedIds] = useState({});
+  const [selectedCuisine, setSelectedCuisine] = useState(null);
+  const CUISINES = ['All', 'Italian', 'Mexican', 'Asian', 'Russian', 'Mediterranean', 'American'];
+  const [isPantryEmpty, setIsPantryEmpty] = useState(false);
+
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
 
@@ -123,27 +129,36 @@ async function handleRecipePress(recipe){
 
   useEffect(() => {
       fetchRecipes(); 
-    }, []);
+    }, [selectedCuisine]);
 
 async function fetchRecipes() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    console.log('Session:', session?.user?.id);
-
     if (!session?.user?.id) {
-      console.log('No session - user not logged in');
       setLoading(false);
       return;
     }
+    
+    // Check if pantry is empty first
+    const { count } = await supabase
+      .from('pantry_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', session.user.id);
 
-    console.log('Calling RPC for user:', session.user.id);
-    const results = await getRecipeRecommendations(session.user.id, {
-      minMatch: 0.0,
-    });
-    console.log('RPC returned', results.length, 'recipes');
-    console.log('First recipe:', results[0]);
-
-    setRecipes(results);
+    if (!count || count === 0) {
+      // Empty pantry — fetch random recipes
+      setIsPantryEmpty(true);
+      const results = await getRandomRecipes(20);
+      setRecipes(results);
+    } else {
+      // Has pantry items — use the recommendation algorithm
+      setIsPantryEmpty(false);
+      const results = await getRecipeRecommendations(session.user.id, {
+        minMatch: 0.0,
+        cuisine: selectedCuisine,
+      });
+      setRecipes(results);
+    }
   } catch (err) {
     console.error('Error fetching recipes:', err);
   } finally {
@@ -163,9 +178,47 @@ async function fetchRecipes() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>👨‍🍳 Recipe Ideas</Text>
+        {isPantryEmpty && (
+          <View style={styles.emptyPantryBanner}>
+            <Text style={styles.emptyPantryBannerText}>
+              📦 Your pantry is empty. Showing random recipes. Add items to your pantry for personalized recommendations!
+            </Text>
+          </View>
+        )}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.cuisineRow}
+        >
+          {CUISINES.map((c) => {
+            const isActive = (c === 'All' && !selectedCuisine) || selectedCuisine === c;
+            return (
+              <Pressable
+                key={c}
+                style={[styles.cuisineChip, isActive && styles.cuisineChipActive]}
+                onPress={() => setSelectedCuisine(c === 'All' ? null : c)}
+              >
+                <Text style={[styles.cuisineChipText, isActive && styles.cuisineChipTextActive]}>
+                  {c}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
         {loading ? (
           <Text>Loading...</Text>
+          ) : recipes.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                {selectedCuisine 
+                  ? `No ${selectedCuisine} recipes match your pantry yet.`
+                  : 'No recipes match your pantry yet.'}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                Try a different cuisine or add more items to your pantry.
+              </Text>
+            </View>
         ) : (
           <>
             <View style={styles.recipeList}>
@@ -396,6 +449,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#c0392b',
     marginBottom: 6,
+    },
+    cuisineRow: {
+    gap: 8,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  cuisineChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  cuisineChipActive: {
+    backgroundColor: '#2e7d32',
+    borderColor: '#2e7d32',
+  },
+  cuisineChipText: {
+    fontSize: 14,
+    color: '#444',
+  },
+  cuisineChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyState: {
+  padding: 24,
+  alignItems: 'center',
+  marginTop: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyPantryBanner: {
+  backgroundColor: '#fff3cd',
+  borderColor: '#ffc107',
+  borderWidth: 1,
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 12,
+  },
+  emptyPantryBannerText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
   },
 });
 
