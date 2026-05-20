@@ -335,7 +335,7 @@ async function handleRecipePress(recipe){
   useEffect(() => {
       fetchRecipes(); 
     }, [selectedCuisine]);
-
+//pushing the new file for debugging
 async function fetchRecipes() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -343,7 +343,7 @@ async function fetchRecipes() {
       setLoading(false);
       return;
     }
-    
+
     // Check if pantry is empty first
     const { count } = await supabase
       .from('pantry_items')
