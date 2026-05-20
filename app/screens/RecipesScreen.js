@@ -130,7 +130,8 @@ async function handleRecipePress(recipe){
   useEffect(() => {
       fetchRecipes(); 
     }, [selectedCuisine]);
-//pushing the new file for debugging
+//pushing the new file for debugging 2
+//doing this again ignore
 async function fetchRecipes() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
