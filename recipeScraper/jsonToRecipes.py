@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import json
@@ -140,12 +138,69 @@ def format_instructions(value: Any) -> str | None:
     return "\n\n".join(f"{index}. {step}" for index, step in enumerate(steps, start=1))
 
 
+# --- Allergen and Dietary Tag Generator ---
+def generate_dietary_tags(ingredients_list: list[Any]) -> dict[str, bool]:
+    if not ingredients_list:
+        return {
+            "contains_dairy": False,
+            "contains_nuts": False,
+            "is_gluten_free": True,
+            "is_vegetarian": False, # Defaulting to False for safety if unknown
+            "is_vegan": False,
+            "is_halal": False,
+            "is_kosher": False
+        }
+
+    # Combine all ingredients into one lowercase string for easy searching
+    all_ingredients = " ".join(str(i) for i in ingredients_list).lower()
+    
+    # Define our keyword lists
+    dairy_words = ['milk', 'cheese', 'butter', 'cream', 'yogurt', 'whey', 'ghee', 'paneer']
+    nut_words = ['peanut', 'almond', 'walnut', 'pecan', 'cashew', 'pistachio', 'macadamia', 'hazelnut', 'pine nut']
+    gluten_words = ['flour', 'wheat', 'bread', 'pasta', 'noodle', 'barley', 'rye', 'soy sauce', 'crumb', 'tortilla', 'dough']
+    meat_words = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'lamb', 'turkey', 'fish', 'shrimp', 'salmon', 'tuna', 'crab', 'sausage', 'steak', 'prosciutto', 'gelatin']
+    animal_words = ['egg', 'honey']
+    haram_words = ['pork', 'bacon', 'ham', 'wine', 'beer', 'vodka', 'rum', 'prosciutto', 'sausage']
+    treif_words = ['pork', 'bacon', 'ham', 'shrimp', 'crab', 'lobster', 'clam', 'oyster', 'scallop']
+
+    # Determine tags
+    contains_dairy = any(word in all_ingredients for word in dairy_words)
+    contains_nuts = any(word in all_ingredients for word in nut_words)
+    is_gluten_free = not any(word in all_ingredients for word in gluten_words)
+    
+    has_meat = any(word in all_ingredients for word in meat_words)
+    has_animal_products = any(word in all_ingredients for word in animal_words)
+    
+    is_vegetarian = not has_meat
+    is_vegan = is_vegetarian and not contains_dairy and not has_animal_products
+    
+    is_halal = not any(word in all_ingredients for word in haram_words)
+    is_kosher = not any(word in all_ingredients for word in treif_words)
+
+    return {
+        "contains_dairy": contains_dairy,
+        "contains_nuts": contains_nuts,
+        "is_gluten_free": is_gluten_free,
+        "is_vegetarian": is_vegetarian,
+        "is_vegan": is_vegan,
+        "is_halal": is_halal,
+        "is_kosher": is_kosher
+    }
+
+
 def recipe_to_row(recipe: dict[str, Any]) -> dict[str, Any] | None:
     title = clean_text(recipe.get("title") or recipe.get("name"))
     source = clean_text(recipe.get("source_url") or recipe.get("source"))
 
     if not title or not source:
         return None
+
+    # --- Extract ingredients and generate tags ---
+    raw_ingredients = recipe.get("ingredients") or recipe.get("recipeIngredient") or []
+    if isinstance(raw_ingredients, str):
+        raw_ingredients = [raw_ingredients]
+        
+    tags = generate_dietary_tags(raw_ingredients)
 
     return {
         "title": title,
@@ -155,6 +210,14 @@ def recipe_to_row(recipe: dict[str, Any]) -> dict[str, Any] | None:
         "prep_time_minutes": parse_minutes(recipe.get("prep_time") or recipe.get("prep_time_minute")),
         "cook_time_minutes": parse_minutes(recipe.get("cook_time") or recipe.get("cook_time_minute")),
         "source": source,
+        # --- NEW: Apply the tags to the database row ---
+        "contains_dairy": tags["contains_dairy"],
+        "contains_nuts": tags["contains_nuts"],
+        "is_gluten_free": tags["is_gluten_free"],
+        "is_vegetarian": tags["is_vegetarian"],
+        "is_vegan": tags["is_vegan"],
+        "is_halal": tags["is_halal"],
+        "is_kosher": tags["is_kosher"],
     }
 
 
