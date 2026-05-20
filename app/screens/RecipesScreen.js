@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
-import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
@@ -332,44 +332,59 @@ async function handleRecipePress(recipe){
     return uniqueLines.join('\n');
   }
 
-  useEffect(() => {
-      fetchRecipes(); 
-    }, [selectedCuisine]);
-//pushing the new file for debugging 2
-//doing this again ignore
-async function fetchRecipes() {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) {
+  const fetchRecipes = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        setRecipes([]);
+        return;
+      }
+
+      // Check if pantry is empty first
+      const { count, error: pantryError } = await supabase
+        .from('pantry_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id);
+
+      if (pantryError) {
+        console.error('Failed to check pantry items:', pantryError.message);
+        setRecipes([]);
+        return;
+      }
+
+      if (!count || count === 0) {
+        // Empty pantry - fetch random recipes
+        setIsPantryEmpty(true);
+        const results = await getRandomRecipes(20);
+        setRecipes(results || []);
+      } else {
+        // Has pantry items - use the recommendation algorithm
+        setIsPantryEmpty(false);
+        const results = await getRecipeRecommendations(session.user.id, {
+          minMatch: 0.0,
+          cuisine: selectedCuisine,
+        });
+        setRecipes(results || []);
+      }
+    } catch (err) {
+      console.error('Error fetching recipes:', err);
+      setRecipes([]);
+    } finally {
       setLoading(false);
-      return;
     }
+  }, [selectedCuisine]);
 
-    // Check if pantry is empty first
-    const { count } = await supabase
-      .from('pantry_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', session.user.id);
+  useEffect(() => {
+    fetchRecipes();
+  }, [fetchRecipes]);
 
-    if (!count || count === 0) {
-      // Empty pantry — fetch random recipes
-      setIsPantryEmpty(true);
-      const results = await getRandomRecipes(20);
-      setRecipes(results);
-    } else {
-      // Has pantry items — use the recommendation algorithm
-      setIsPantryEmpty(false);
-      const results = await getRecipeRecommendations(session.user.id, {
-        minMatch: 0.0,
-        cuisine: selectedCuisine,
-      });
-      setRecipes(results);
-    }
-  } catch (err) {
-    console.error('Error fetching recipes:', err);
-  } finally {
-    setLoading(false);
-  }
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecipes();
+    }, [fetchRecipes])
+  );
 
   return (
     <View style={styles.container}>
@@ -537,7 +552,7 @@ async function fetchRecipes() {
           
     </View>
   );
-} 
+}
      /*handleLogoutPress - default function from supabase for handling logout, session management handled by supabase*/
      /* fetch recipes - currently just grabs the first 5 recipes from the database and displays them in the Recipe card view*/
      /* TODO: once alg is completed we need to change fetchRecipes function to fetchMakeableRecipes*/
