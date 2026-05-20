@@ -38,7 +38,7 @@ export default function ScannerScreen() {
         setCameraActive(false); 
         setCsvData(""); 
         setParsedItems([]);
-      } catch (error) {
+      } catch (_error) {
         Alert.alert("Camera Error", "Failed to take picture.");
       } finally {
         setLoading(false);
