@@ -68,7 +68,6 @@ export default function RecipesScreen() {
   }
 
   // --- REVIEWS LOGIC ---
-// --- REVIEWS LOGIC ---
   async function handleOpenReviews(recipe) {
     setReviewRecipe(recipe);
     setReviewsModalVisible(true);
@@ -89,21 +88,42 @@ export default function RecipesScreen() {
   }
 
   async function submitReview() {
-    if (userRating === 0) return Alert.alert("Hold on!", "Please select a star rating first.");
-    
-    setSubmittingReview(true);
-    const { data: authData } = await supabase.auth.getUser();
-    
-    if (authData?.user && reviewRecipe) {
-      const targetRecipeId = reviewRecipe.id || reviewRecipe.recipe_id;
+    try {
+      // 1. Ensure they tapped a star rating (Text is optional)
+      if (userRating === 0) {
+        Alert.alert("Missing Rating", "Please tap a star to select a rating before submitting.");
+        return;
+      }
+      
+      setSubmittingReview(true);
+      
+      // 2. Ensure they are actively logged in
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !authData?.user) {
+        Alert.alert("Session Expired", "You must be logged in to leave a review. Please sign out and sign back in.");
+        setSubmittingReview(false);
+        return;
+      }
 
-      // 1. Check if the user already has a review for this recipe
-      const { data: existingReview } = await supabase
+      if (!reviewRecipe) {
+        Alert.alert("Error", "Could not identify the recipe to review.");
+        setSubmittingReview(false);
+        return;
+      }
+
+      const targetRecipeId = reviewRecipe.id || reviewRecipe.recipe_id;
+      
+      // Only trim the text if they actually typed something, otherwise send null
+      const finalReviewText = userReviewText ? userReviewText.trim() : null;
+
+      // 3. Check if the user already has a review for this recipe
+      const { data: existingReview, error: fetchError } = await supabase
         .from('recipe_reviews')
         .select('id')
         .eq('user_id', authData.user.id)
         .eq('recipe_id', targetRecipeId)
-        .maybeSingle(); // Safely returns null if no review exists yet
+        .maybeSingle();
 
       let dbError = null;
 
@@ -113,30 +133,32 @@ export default function RecipesScreen() {
           .from('recipe_reviews')
           .update({
             rating: userRating,
-            review_text: userReviewText.trim()
+            review_text: finalReviewText
           })
           .eq('id', existingReview.id);
         dbError = error;
       } else {
-        // INSERT new review
+        // INSERT new review (Wrapped in an array [] for maximum Supabase compatibility)
         const { error } = await supabase
           .from('recipe_reviews')
-          .insert({
+          .insert([{
             user_id: authData.user.id,
             recipe_id: targetRecipeId,
             rating: userRating,
-            review_text: userReviewText.trim()
-          });
+            review_text: finalReviewText
+          }]);
         dbError = error;
       }
 
+      // 4. Handle Database Success or Failure
       if (dbError) {
-        console.error("Review Error:", dbError);
+        console.error("Database Error:", dbError);
         Alert.alert("Failed to submit review", dbError.message);
       } else {
-        Alert.alert("Success!", "Your review has been posted.");
+        // Show confirmation!
+        Alert.alert("Review Submitted!", "Your rating has been posted successfully.");
         
-        // 2. Instantly fetch the fresh list of reviews so it updates on screen!
+        // Instantly fetch the fresh list of reviews so it updates on screen immediately
         const { data: freshReviews } = await supabase
           .from('recipe_reviews')
           .select('*')
@@ -145,17 +167,20 @@ export default function RecipesScreen() {
 
         if (freshReviews) setActiveRecipeReviews(freshReviews);
 
-        // 3. Reset the input form fields
+        // Reset the input form fields
         setUserRating(0);
         setUserReviewText('');
 
-        // 4. Update the background recipes list to recalculate the average stars on the cards
+        // Re-run the main fetchRecipes function to update the average stars on the recipe cards behind the modal
         fetchRecipes(); 
       }
+    } catch (err) {
+      console.error("Unexpected Code Error:", err);
+      Alert.alert("Unexpected Error", "Something went wrong in the app. Please try again.");
+    } finally {
+      setSubmittingReview(false);
     }
-    setSubmittingReview(false);
   }
-  // -----------------------
 
   async function handleRecipePress(recipe){
     setSelectedRecipe(recipe);
