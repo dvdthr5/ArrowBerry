@@ -76,7 +76,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // --- NEW: Handle opening the saved recipe modal ---
+  // --- Handle opening the saved recipe modal ---
   async function handleRecipePress(savedRecipeItem) {
     // 1. Fetch the full recipe details using the saved recipe_id
     const { data: recipeData, error: recipeError } = await supabase
