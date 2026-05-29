@@ -1,28 +1,31 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
-import {
-  Alert,
-  Button,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+import { useEffect, useState, useCallback } from 'react';
+import { 
+  Alert, 
+  Button, 
+  Image, 
+  Linking, 
+  Modal, 
+  Pressable, 
+  ScrollView, 
+  StyleSheet, 
+  Text, 
+  View 
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
     <Pressable style={styles.recipeCard} onPress={() => onPress(recipe)}>
       <Text style={styles.recipeCardTitle}>{recipe.title}</Text>
-      <Text style={styles.recipeMatchBadge}>
-        {Math.round(recipe.match_percentage * 100)}% match
-        {' • '}
-        {recipe.matched_ingredients}/{recipe.total_ingredients} ingredients
-      </Text>
+      {recipe.total_ingredients > 0 && (
+        <Text style={styles.recipeMatchBadge}>
+          {Math.round(recipe.match_percentage * 100)}% match
+          {' • '}
+          {recipe.matched_ingredients}/{recipe.total_ingredients} ingredients
+        </Text>
+      )}
       {!!recipe.description && (
         <Text style={styles.recipeCardDescription}>{recipe.description}</Text>
       )}
@@ -43,121 +46,9 @@ export default function RecipesScreen() {
   const [selectedRecipeIngredients, setSelectedRecipeIngredients] = useState([]);
 
   const [sessionSavedIds, setSessionSavedIds] = useState({});
-
-  function getRecipeId(recipe) {
-    return recipe?.recipe_id || recipe?.id;
-  }
-
-  function normalizeShoppingItemName(value) {
-    if (!value) return '';
-    return value.trim().toLowerCase().replace(/\s+/g, '');
-  }
-
-  function getMissingIngredientQuantity(ingredientName) {
-    const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
-      normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
-    ));
-
-    if (!matchingIngredient?.quantity) {
-      return null;
-    }
-
-    const numericQuantity = Number(matchingIngredient.quantity);
-    return Number.isNaN(numericQuantity) ? null : numericQuantity;
-  }
-
-  function getMissingIngredientUnit(ingredientName) {
-  const matchingIngredient = selectedRecipeIngredients.find((ingredient) => (
-    normalizeShoppingItemName(ingredient.ingredient_name) === normalizeShoppingItemName(ingredientName)
-  ));
-
-  return matchingIngredient?.unit || null;
-}
-
-  // Helper: Normalize a recipe ingredient object to a standard shape
-  function normalizeRecipeIngredient(ingredient) {
-    if (!ingredient) {
-      return null;
-    }
-
-    if (typeof ingredient === 'string') {
-      return {
-        ingredient_name: ingredient,
-        quantity: null,
-        unit: '',
-      };
-    }
-
-    const ingredientName = ingredient.ingredient_name
-      || ingredient.ingredientName
-      || ingredient.name
-      || ingredient.item_name
-      || ingredient.title;
-
-    if (!ingredientName) {
-      return null;
-    }
-
-    return {
-      ingredient_name: ingredientName,
-      quantity: ingredient.quantity ?? ingredient.amount ?? null,
-      unit: ingredient.measurement_unit
-        ?? ingredient.measurementUnit
-        ?? ingredient.measuringUnit
-        ?? ingredient.unit
-        ?? ingredient.unit_name
-        ?? '',
-    };
-  }
-
-  // Helper: Get a fallback list of normalized ingredients from a recipe object
-  function getRecipeIngredientFallback(recipe) {
-    const possibleIngredientLists = [
-      recipe?.ingredients,
-      recipe?.ingredient_list,
-      recipe?.ingredients_list,
-      recipe?.matched_list,
-      recipe?.missing_list,
-    ];
-
-    return possibleIngredientLists
-      .filter(Array.isArray)
-      .flat()
-      .map(normalizeRecipeIngredient)
-      .filter(Boolean);
-  }
-
-  // Helper: Format the quantity, removing trailing .0 for integers
-  function formatIngredientQuantity(quantity) {
-    if (quantity == null || quantity === '') {
-      return '';
-    }
-
-    const numericQuantity = Number(quantity);
-
-    if (Number.isNaN(numericQuantity)) {
-      return String(quantity);
-    }
-
-    return Number.isInteger(numericQuantity)
-      ? String(numericQuantity)
-      : String(numericQuantity).replace(/\.0+$/, '');
-  }
-
-  // Helper: Format ingredient amount for display (quantity + unit)
-  function formatIngredientAmount(ingredient) {
-    return [
-      formatIngredientQuantity(ingredient.quantity),
-      ingredient.unit,
-    ]
-      .filter((value) => value != null && String(value).trim() !== '')
-      .join(' ');
-  }
-
-  // Helper: Format ingredient name for display
-  function formatIngredientName(ingredient) {
-    return ingredient.ingredient_name || '';
-  }
+  const [selectedCuisine, setSelectedCuisine] = useState(null);
+  const CUISINES = ['All', 'Italian', 'Mexican', 'Asian', 'Russian', 'Mediterranean', 'American'];
+  const [isPantryEmpty, setIsPantryEmpty] = useState(false);
 
   async function handleLogoutPress(){
     const {error} = await supabase.auth.signOut();
@@ -168,35 +59,31 @@ export default function RecipesScreen() {
   }
 
 async function handleRecipePress(recipe){
-  const fallbackIngredients = getRecipeIngredientFallback(recipe);
+    setSelectedRecipe(recipe);
 
-  setSelectedRecipe(recipe);
-  setSelectedRecipeIngredients(fallbackIngredients);
+    const { data, error } = await supabase
+      .from('recipe_ingredients')
+      .select('quantity, unit, ingredient_name')
+      .eq('recipe_id', recipe.id);
 
-  const { data, error } = await supabase
-    .from('recipe_ingredients')
-    .select('ingredient_name, quantity, unit')
-    .eq('recipe_id', getRecipeId(recipe));
+    if (error) {
+      console.error('Failed to fetch recipe ingredients', error.message);
+      setSelectedRecipeIngredients([]);
+      return;
+    }
 
-  if (error) {
-    console.error('Failed to fetch recipe ingredients', error.message);
-    return;
+    setSelectedRecipeIngredients(data || []);
   }
-
-  const normalizedIngredients = (data || [])
-    .map(normalizeRecipeIngredient)
-    .filter(Boolean);
-
-  console.log('Recipe ingredients fetched:', normalizedIngredients);
-
-  setSelectedRecipeIngredients(normalizedIngredients.length ? normalizedIngredients : fallbackIngredients);
-}
 
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
     setSelectedRecipeIngredients([]);
   }
 
+  async function handleAddMissingIngredients(recipe) {
+  // TODO: integrate with shopping list feature once it's built
+  Alert.alert('Coming soon', 'This feature is being built.');
+}
   async function handleOpenRecipeSource(recipe) {
     const sourceUrl = recipe?.source;
 
@@ -223,100 +110,19 @@ async function handleRecipePress(recipe){
     }
 
     const { error } = await supabase.from('saved_recipes').insert([
-      {
-        user_id: userData.user.id,
-        recipe_id: getRecipeId(recipe),
-        recipe_title: recipe.title,
+      { 
+        user_id: userData.user.id, 
+        recipe_id: recipe.id,
+        recipe_title: recipe.title 
       }
     ]);
 
     if (error) {
       Alert.alert("Failed to save", error.message);
     } else {
-      setSessionSavedIds((previousSavedIds) => ({
-        ...previousSavedIds,
-        [getRecipeId(recipe)]: true,
-      }));
       Alert.alert("Success!", `${recipe.title} has been saved to your profile.`);
     }
   }
-
-  async function handleAddMissingIngredients(recipe) {
-    if (!recipe?.missing_list || recipe.missing_list.length === 0) {
-      return Alert.alert('No Missing Ingredients', 'This recipe does not have any missing ingredients to add.');
-    }
-
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !userData?.user) {
-      return Alert.alert('Error', 'You must be logged in to add shopping list items.');
-    }
-
-    const shoppingItems = recipe.missing_list
-      .map((ingredient) => ({
-        user_id: userData.user.id,
-        item_name: ingredient.ingredient_name,
-        quantity: getMissingIngredientQuantity(ingredient.ingredient_name),
-        unit: getMissingIngredientUnit(ingredient.ingredient_name),
-        checked: false,
-      }))
-      .filter((ingredient) => ingredient.item_name);
-
-    if (shoppingItems.length === 0) {
-      return Alert.alert('No Missing Ingredients', 'There are no valid missing ingredients to add.');
-    }
-
-    const { data: existingItems, error: fetchError } = await supabase
-      .from('shopping_list')
-      .select('*')
-      .eq('user_id', userData.user.id);
-
-    if (fetchError) {
-      return Alert.alert('Failed to Add Ingredients', fetchError.message);
-    }
-
-    const inserts = [];
-    const updates = [];
-
-    shoppingItems.forEach((shoppingItem) => {
-      const matchingItem = (existingItems || []).find((existingItem) => (
-        normalizeShoppingItemName(existingItem.item_name) === normalizeShoppingItemName(shoppingItem.item_name)
-      ));
-
-      if (matchingItem) {
-        updates.push({
-          id: matchingItem.id,
-          quantity: (Number(matchingItem.quantity) || 0) + (Number(shoppingItem.quantity) || 0),
-        });
-      } else {
-        inserts.push(shoppingItem);
-      }
-    });
-
-    const updateResults = await Promise.all(updates.map((item) => (
-      supabase
-        .from('shopping_list')
-        .update({ quantity: item.quantity || null })
-        .eq('id', item.id)
-    )));
-
-    const updateError = updateResults.find((result) => result.error)?.error;
-
-    if (updateError) {
-      return Alert.alert('Failed to Add Ingredients', updateError.message);
-    }
-
-    if (inserts.length > 0) {
-      const { error } = await supabase.from('shopping_list').insert(inserts);
-
-      if (error) {
-        return Alert.alert('Failed to Add Ingredients', error.message);
-      }
-    }
-
-    Alert.alert('Added to Shopping List', 'Missing ingredients were added to your shopping list.');
-  }
-
   function formatRecipeInstructions(instructions){
     if (!instructions){
       return '';
@@ -355,41 +161,45 @@ async function handleRecipePress(recipe){
     return uniqueLines.join('\n');
   }
 
-  // rerun the algorithm for recommendations
-  useFocusEffect(
-    useCallback(() => {
-      fetchRecipes();
-    }, [])
-  );
-
+  useEffect(() => {
+      fetchRecipes(); 
+    }, [selectedCuisine]);
+//pushing the new file for debugging 2
+//doing this again ignore
 async function fetchRecipes() {
-    setLoading(true);
-    
-    // Get the current user ID
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !userData?.user) {
-      console.error("User not logged in");
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
       setLoading(false);
       return;
     }
 
-    // Call your new smart SQL function instead of a basic fetch!
-    const { data, error } = await supabase.rpc('recommend_recipes', {
-      p_user_id: userData.user.id,
-      p_limit: 20,
-      p_min_match: 0.0 // Set to 0 to show recipes even if pantry is empty, let allergens filter
-    });
+    // Check if pantry is empty first
+    const { count } = await supabase
+      .from('pantry_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', session.user.id);
 
-    if (error) {
-      console.error("Algorithm error:", error.message);
-      setRecipes([]);
+    if (!count || count === 0) {
+      // Empty pantry — fetch random recipes
+      setIsPantryEmpty(true);
+      const results = await getRandomRecipes(20);
+      setRecipes(results);
     } else {
-      setRecipes(data || []);
+      // Has pantry items — use the recommendation algorithm
+      setIsPantryEmpty(false);
+      const results = await getRecipeRecommendations(session.user.id, {
+        minMatch: 0.0,
+        cuisine: selectedCuisine,
+      });
+      setRecipes(results);
     }
-    
+  } catch (err) {
+    console.error('Error fetching recipes:', err);
+  } finally {
     setLoading(false);
   }
+}
 
   return (
     <View style={styles.container}>
@@ -403,15 +213,53 @@ async function fetchRecipes() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>👨‍🍳 Recipe Ideas</Text>
+        {isPantryEmpty && (
+          <View style={styles.emptyPantryBanner}>
+            <Text style={styles.emptyPantryBannerText}>
+              📦 Your pantry is empty. Showing random recipes. Add items to your pantry for personalized recommendations!
+            </Text>
+          </View>
+        )}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.cuisineRow}
+        >
+          {CUISINES.map((c) => {
+            const isActive = (c === 'All' && !selectedCuisine) || selectedCuisine === c;
+            return (
+              <Pressable
+                key={c}
+                style={[styles.cuisineChip, isActive && styles.cuisineChipActive]}
+                onPress={() => setSelectedCuisine(c === 'All' ? null : c)}
+              >
+                <Text style={[styles.cuisineChipText, isActive && styles.cuisineChipTextActive]}>
+                  {c}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
         {loading ? (
           <Text>Loading...</Text>
+          ) : recipes.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                {selectedCuisine 
+                  ? `No ${selectedCuisine} recipes match your pantry yet.`
+                  : 'No recipes match your pantry yet.'}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                Try a different cuisine or add more items to your pantry.
+              </Text>
+            </View>
         ) : (
           <>
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {getRecipeId(recipe)}
+                  key = {recipe.recipe_id}
                   recipe = {recipe}
                   onPress = {handleRecipePress}
                 />
@@ -451,19 +299,14 @@ async function fetchRecipes() {
                       <View style={styles.ingredientsSection}>
                         <Text style={styles.recipeDetailsText}>Ingredients:</Text>
                         {selectedRecipeIngredients.map((ingredient, index) => {
-                          const ingredientAmount = formatIngredientAmount(ingredient);
-                          const ingredientName = formatIngredientName(ingredient);
+                          const ingredientLine = [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
+                            .filter(Boolean)
+                            .join(' ');
 
                           return (
-                            <View key={`${ingredientName}-${index}`} style={styles.ingredientRow}>
-                              <Text style={styles.ingredientBullet}>•</Text>
-                              <Text style={styles.ingredientAmount}>
-                                {ingredientAmount || '—'}
-                              </Text>
-                              <Text style={styles.ingredientName}>
-                                {ingredientName}
-                              </Text>
-                            </View>
+                            <Text key={`${ingredient.ingredient_name}-${index}`} style={styles.recipeDetailsText}>
+                              • {ingredientLine}
+                            </Text>
                           );
                         })}
                       </View>
@@ -496,11 +339,11 @@ async function fetchRecipes() {
                   </ScrollView>
 
                   {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
-                  <View style={{ marginTop: 15, gap: 10 }}>
+                  <View style={{ marginTop: 15 }}>
                     <Button 
-                      title={sessionSavedIds[getRecipeId(selectedRecipe)] ? "Saved to Profile" : "Save to Profile"} 
-                      color={sessionSavedIds[getRecipeId(selectedRecipe)] ? "gray" : "#28a745"} 
-                      disabled={sessionSavedIds[getRecipeId(selectedRecipe)]}
+                      title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
+                      color={sessionSavedIds[selectedRecipe.id] ? "gray" : "#28a745"} 
+                      disabled={sessionSavedIds[selectedRecipe.id]}
                       onPress={() => handleSaveRecipe(selectedRecipe)} 
                     />
                     {!!selectedRecipe.missing_list?.length && (
@@ -625,30 +468,6 @@ const styles = StyleSheet.create({
   ingredientsSection: {
     marginBottom: 12,
   },
-  ingredientRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  ingredientBullet: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginRight: 6,
-    color: '#111',
-  },
-  ingredientAmount: {
-    width: 70,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: '#111',
-  },
-  ingredientName: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#111',
-  },
   modalCloseButton: {
     paddingVertical: 8, 
     paddingHorizontal: 12,
@@ -691,6 +510,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#c0392b',
     marginBottom: 6,
+    },
+    cuisineRow: {
+    gap: 8,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  cuisineChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  cuisineChipActive: {
+    backgroundColor: '#2e7d32',
+    borderColor: '#2e7d32',
+  },
+  cuisineChipText: {
+    fontSize: 14,
+    color: '#444',
+  },
+  cuisineChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyState: {
+  padding: 24,
+  alignItems: 'center',
+  marginTop: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyPantryBanner: {
+  backgroundColor: '#fff3cd',
+  borderColor: '#ffc107',
+  borderWidth: 1,
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 12,
+  },
+  emptyPantryBannerText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
   },
 });
 
