@@ -190,9 +190,36 @@ export default function RecipesScreen() {
     if (data) setSelectedRecipeIngredients(data);
   }
 
+  const normalizedIngredients = (data || [])
+    .map(normalizeRecipeIngredient)
+    .filter(Boolean);
+
+  console.log('Recipe ingredients fetched:', normalizedIngredients);
+
+  setSelectedRecipeIngredients(normalizedIngredients.length ? normalizedIngredients : fallbackIngredients);
+}
+
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
     setSelectedRecipeIngredients([]);
+  }
+
+  async function handleOpenRecipeSource(recipe) {
+    const sourceUrl = recipe?.source;
+
+    if (!sourceUrl) {
+      Alert.alert('No Source Found', 'This recipe does not have a source link.');
+      return;
+    }
+
+    const canOpenUrl = await Linking.canOpenURL(sourceUrl);
+
+    if (!canOpenUrl) {
+      Alert.alert('Unable to Open Source', 'This recipe source link is not valid.');
+      return;
+    }
+
+    await Linking.openURL(sourceUrl);
   }
 
   async function handleSaveRecipe(recipe) {
@@ -207,6 +234,82 @@ export default function RecipesScreen() {
       setSessionSavedIds(prev => ({ ...prev, [recipe.id || recipe.recipe_id]: true }));
       Alert.alert("Success!", `${recipe.title} has been saved.`);
     }
+  }
+
+  async function handleAddMissingIngredients(recipe) {
+    if (!recipe?.missing_list || recipe.missing_list.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'This recipe does not have any missing ingredients to add.');
+    }
+
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !userData?.user) {
+      return Alert.alert('Error', 'You must be logged in to add shopping list items.');
+    }
+
+    const shoppingItems = recipe.missing_list
+      .map((ingredient) => ({
+        user_id: userData.user.id,
+        item_name: ingredient.ingredient_name,
+        quantity: getMissingIngredientQuantity(ingredient.ingredient_name),
+        unit: getMissingIngredientUnit(ingredient.ingredient_name),
+        checked: false,
+      }))
+      .filter((ingredient) => ingredient.item_name);
+
+    if (shoppingItems.length === 0) {
+      return Alert.alert('No Missing Ingredients', 'There are no valid missing ingredients to add.');
+    }
+
+    const { data: existingItems, error: fetchError } = await supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', userData.user.id);
+
+    if (fetchError) {
+      return Alert.alert('Failed to Add Ingredients', fetchError.message);
+    }
+
+    const inserts = [];
+    const updates = [];
+
+    shoppingItems.forEach((shoppingItem) => {
+      const matchingItem = (existingItems || []).find((existingItem) => (
+        normalizeShoppingItemName(existingItem.item_name) === normalizeShoppingItemName(shoppingItem.item_name)
+      ));
+
+      if (matchingItem) {
+        updates.push({
+          id: matchingItem.id,
+          quantity: (Number(matchingItem.quantity) || 0) + (Number(shoppingItem.quantity) || 0),
+        });
+      } else {
+        inserts.push(shoppingItem);
+      }
+    });
+
+    const updateResults = await Promise.all(updates.map((item) => (
+      supabase
+        .from('shopping_list')
+        .update({ quantity: item.quantity || null })
+        .eq('id', item.id)
+    )));
+
+    const updateError = updateResults.find((result) => result.error)?.error;
+
+    if (updateError) {
+      return Alert.alert('Failed to Add Ingredients', updateError.message);
+    }
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('shopping_list').insert(inserts);
+
+      if (error) {
+        return Alert.alert('Failed to Add Ingredients', error.message);
+      }
+    }
+
+    Alert.alert('Added to Shopping List', 'Missing ingredients were added to your shopping list.');
   }
 
   function formatRecipeInstructions(instructions){

@@ -1,5 +1,3 @@
-
-
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
@@ -14,18 +12,49 @@ const mockDelete = jest.fn(() => ({
   eq: mockEq,
 }));
 
+const mockShoppingOrder = jest.fn();
+const mockShoppingEqResult = jest.fn();
+const mockShoppingEq = jest.fn(() => ({
+  order: mockShoppingOrder,
+  then: (resolve, reject) => mockShoppingEqResult().then(resolve, reject),
+  catch: (reject) => mockShoppingEqResult().catch(reject),
+}));
+const mockShoppingSelect = jest.fn(() => ({
+  eq: mockShoppingEq,
+}));
+const mockShoppingInsert = jest.fn();
+const mockShoppingUpdateEq = jest.fn();
+const mockShoppingUpdate = jest.fn(() => ({
+  eq: mockShoppingUpdateEq,
+}));
+const mockShoppingDeleteEq = jest.fn();
+const mockShoppingDelete = jest.fn(() => ({
+  eq: mockShoppingDeleteEq,
+}));
+
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
     },
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        order: mockOrder,
-      })),
-      insert: mockInsert,
-      delete: mockDelete,
-    })),
+    from: jest.fn((table) => {
+      if (table === 'shopping_list') {
+        return {
+          select: mockShoppingSelect,
+          insert: mockShoppingInsert,
+          update: mockShoppingUpdate,
+          delete: mockShoppingDelete,
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          order: mockOrder,
+        })),
+        insert: mockInsert,
+        delete: mockDelete,
+      };
+    }),
   },
 }));
 
@@ -45,6 +74,7 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 describe('PantryScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
     supabase.auth.getUser.mockResolvedValue({
@@ -53,6 +83,46 @@ describe('PantryScreen', () => {
           id: 'test-user-id',
         },
       },
+      error: null,
+    });
+
+    mockOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockEq.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockShoppingOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingEqResult.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockShoppingUpdateEq.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockShoppingDeleteEq.mockResolvedValue({
+      data: null,
       error: null,
     });
   });
@@ -274,6 +344,173 @@ describe('PantryScreen', () => {
 
     await waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith('Error', 'Delete failed');
+    });
+  });
+// Shopping list tests
+
+  test('adds a shopping list item with quantity and unit', async () => {
+    mockOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingEqResult.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    const { findByText, getByText, getByTestId, findByPlaceholderText, getByPlaceholderText } = render(<PantryScreen />);
+
+    expect(await findByText(/your pantry is empty/i)).toBeTruthy();
+
+    fireEvent.press(getByText('List'));
+
+    const itemInput = await findByPlaceholderText('Item');
+    const quantityInput = getByPlaceholderText('Qty');
+    const unitInput = getByPlaceholderText('Unit');
+
+    fireEvent.changeText(itemInput, '  Rice  ');
+    fireEvent.changeText(quantityInput, '2');
+    fireEvent.changeText(unitInput, ' cups ');
+    fireEvent.press(getByTestId('shopping-add-button'));
+
+    await waitFor(() => {
+      expect(mockShoppingInsert).toHaveBeenCalledWith({
+        user_id: 'test-user-id',
+        item_name: 'Rice',
+        quantity: 2,
+        unit: 'cups',
+        checked: false,
+      });
+    });
+  });
+
+  test('combines duplicate shopping list items by adding quantities', async () => {
+    mockOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingEqResult.mockResolvedValue({
+      data: [
+        {
+          id: 10,
+          user_id: 'test-user-id',
+          item_name: 'Rice',
+          quantity: 2,
+          unit: 'cups',
+          checked: false,
+        },
+      ],
+      error: null,
+    });
+
+    const { findByText, getByText, getByTestId, findByPlaceholderText, getByPlaceholderText } = render(<PantryScreen />);
+
+    expect(await findByText(/your pantry is empty/i)).toBeTruthy();
+
+    fireEvent.press(getByText('List'));
+
+    const itemInput = await findByPlaceholderText('Item');
+    const quantityInput = getByPlaceholderText('Qty');
+    const unitInput = getByPlaceholderText('Unit');
+
+    fireEvent.changeText(itemInput, ' rice ');
+    fireEvent.changeText(quantityInput, '3');
+    fireEvent.changeText(unitInput, 'cups');
+
+    await waitFor(() => {
+      expect(itemInput.props.value).toBe(' rice ');
+      expect(quantityInput.props.value).toBe('3');
+      expect(unitInput.props.value).toBe('cups');
+    });
+
+    fireEvent.press(getByTestId('shopping-add-button'));
+
+    await waitFor(() => {
+      expect(mockShoppingUpdate).toHaveBeenCalledWith({
+        quantity: 5,
+        unit: 'cups',
+      });
+      expect(mockShoppingUpdateEq).toHaveBeenCalledWith('id', 10);
+      expect(mockShoppingInsert).not.toHaveBeenCalled();
+    });
+  });
+
+  test('toggles a shopping list item checked state', async () => {
+    mockOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingOrder.mockResolvedValue({
+      data: [
+        {
+          id: 20,
+          user_id: 'test-user-id',
+          item_name: 'Rice',
+          quantity: 2,
+          unit: 'cups',
+          checked: false,
+        },
+      ],
+      error: null,
+    });
+
+    const { findByText, getByText, getByTestId } = render(<PantryScreen />);
+
+    expect(await findByText(/your pantry is empty/i)).toBeTruthy();
+
+    fireEvent.press(getByText('List'));
+
+    expect(await findByText('Rice')).toBeTruthy();
+    expect(await findByText('2 cups')).toBeTruthy();
+
+    fireEvent.press(getByTestId('shopping-checkbox-20'));
+
+    await waitFor(() => {
+      expect(mockShoppingUpdate).toHaveBeenCalledWith({ checked: true });
+      expect(mockShoppingUpdateEq).toHaveBeenCalledWith('id', 20);
+    });
+  });
+
+  test('deletes a shopping list item', async () => {
+    mockOrder.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    mockShoppingOrder.mockResolvedValue({
+      data: [
+        {
+          id: 30,
+          user_id: 'test-user-id',
+          item_name: 'Rice',
+          quantity: 2,
+          unit: 'cups',
+          checked: false,
+        },
+      ],
+      error: null,
+    });
+
+    const { findByText, getByText } = render(<PantryScreen />);
+
+    expect(await findByText(/your pantry is empty/i)).toBeTruthy();
+
+    fireEvent.press(getByText('List'));
+
+    expect(await findByText('Rice')).toBeTruthy();
+
+    fireEvent.press(getByText(/delete/i));
+
+    await waitFor(() => {
+      expect(mockShoppingDeleteEq).toHaveBeenCalledWith('id', 30);
     });
   });
 });

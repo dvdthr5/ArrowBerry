@@ -39,6 +39,16 @@ const mockReviewsQueryBuilder = {
   maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) // Simulates no prior review from current user
 };
 
+const mockShoppingEq = jest.fn();
+const mockShoppingSelect = jest.fn(() => ({
+  eq: mockShoppingEq,
+}));
+const mockShoppingInsert = jest.fn();
+const mockShoppingUpdateEq = jest.fn();
+const mockShoppingUpdate = jest.fn(() => ({
+  eq: mockShoppingUpdateEq,
+}));
+
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
@@ -131,8 +141,7 @@ describe('RecipeScreen - Ratings & Reviews', () => {
       </NavigationContainer>
     );
 
-    const recipeCard = await findByText('Chicken Rice Bowl');
-    fireEvent.press(recipeCard);
+    fireEvent.press(await findByText('Chicken Rice Bowl'));
 
     await waitFor(() => {
       expect(supabase.from).toHaveBeenCalledWith('recipe_ingredients');
