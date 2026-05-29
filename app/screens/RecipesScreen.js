@@ -80,6 +80,10 @@ async function handleRecipePress(recipe){
     setSelectedRecipeIngredients([]);
   }
 
+  async function handleAddMissingIngredients(recipe) {
+  // TODO: integrate with shopping list feature once it's built
+  Alert.alert('Coming soon', 'This feature is being built.');
+}
   async function handleOpenRecipeSource(recipe) {
     const sourceUrl = recipe?.source;
 
