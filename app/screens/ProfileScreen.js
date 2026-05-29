@@ -9,6 +9,7 @@ export default function ProfileScreen() {
   
   // Real Database State
   const [savedRecipes, setSavedRecipes] = useState([]);
+  const [myReviews, setMyReviews] = useState([]);
   const [fetchingRecipes, setFetchingRecipes] = useState(true);
 
   // Modal State (Matches RecipesScreen)
@@ -40,7 +41,7 @@ export default function ProfileScreen() {
             
           if (recipes) setSavedRecipes(recipes);
 
-          // 2. NEW: Fetch dietary preferences and update the switches
+          // 2. Fetch dietary preferences and update the switches
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
@@ -58,6 +59,15 @@ export default function ProfileScreen() {
               glutenFree: profileData.gluten_free || false,
             });
           }
+
+          // 3. Fetch the user's past reviews
+          const { data: reviewsData } = await supabase
+            .from('recipe_reviews')
+            .select('*, recipes(title)')
+            .eq('user_id', authData.user.id)
+            .order('created_at', { ascending: false });
+
+          if (reviewsData) setMyReviews(reviewsData);
         }
         setFetchingRecipes(false);
       };
@@ -66,7 +76,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // --- NEW: Handle opening the saved recipe modal ---
+  // --- Handle opening the saved recipe modal ---
   async function handleRecipePress(savedRecipeItem) {
     // 1. Fetch the full recipe details using the saved recipe_id
     const { data: recipeData, error: recipeError } = await supabase
@@ -298,6 +308,31 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* --- My Reviews --- */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>My Reviews</Text>
+          
+          {fetchingRecipes ? (
+            <ActivityIndicator size="small" color="#007bff" />
+          ) : myReviews.length > 0 ? (
+            myReviews.map((review) => (
+              <View key={review.id} style={styles.recipeItemContainer}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.recipeTitle}>{review.recipes?.title || 'Unknown Recipe'}</Text>
+                  <Text style={{ fontSize: 16, color: '#f5a623', marginBottom: 4 }}>
+                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                  </Text>
+                  {review.review_text ? (
+                    <Text style={{ fontSize: 14, color: '#555', fontStyle: 'italic' }}>"{review.review_text}"</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>You haven't reviewed any recipes yet.</Text>
+          )}
+        </View>
+
         {/* --- Dietary Restrictions --- */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Dietary Restrictions</Text>
@@ -316,7 +351,7 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* --- NEW: Recipe Details Modal --- */}
+      {/* --- Recipe Details Modal --- */}
       <Modal 
         visible={!!selectedRecipe} 
         transparent={true} 

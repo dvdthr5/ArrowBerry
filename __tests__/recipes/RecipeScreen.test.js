@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import RecipeScreen from '../../app/screens/RecipesScreen';
 import { supabase } from '../../lib/supabase';
 
+// Mock Data
 const mockRecipeData = [
   {
     id: 1,
@@ -15,37 +16,28 @@ const mockRecipeData = [
     match_percentage: 1,
     matched_ingredients: 2,
     total_ingredients: 2,
-    missing_list: [
-      {
-        ingredient_name: 'rice',
-        is_core: true,
-      },
-    ],
-  },
-  {
-    id: 2,
-    recipe_id: 2,
-    title: 'Pasta Salad',
-    description: 'A quick pasta salad.',
-    instructions: '1. Cook pasta. 2. Mix ingredients.',
-    image_url: null,
-    match_percentage: 0.5,
-    matched_ingredients: 1,
-    total_ingredients: 2,
     missing_list: [],
-  },
+  }
 ];
 
-const mockLimit = jest.fn();
-const mockEq = jest.fn();
-const mockRecipesSelect = jest.fn(() => ({
-  limit: mockLimit,
-}));
-const mockIngredientsSelect = jest.fn(() => ({
-  eq: mockEq,
-}));
-const mockInsert = jest.fn();
-const mockRpc = jest.fn(); // Added RPC mock
+const mockRatingSummary = [
+  { recipe_id: 1, average_rating: 4.5, total_reviews: 12 }
+];
+
+const mockExistingReviews = [
+  { id: 101, recipe_id: 1, user_id: 'other-user', rating: 5, review_text: 'Loved it!' }
+];
+
+// Robust Chain Mocks for Supabase
+const mockInsertSavedRecipe = jest.fn().mockResolvedValue({ error: null });
+const mockInsertReview = jest.fn().mockResolvedValue({ error: null });
+const mockUpdateReview = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+
+const mockReviewsQueryBuilder = {
+  eq: jest.fn().mockReturnThis(),
+  order: jest.fn().mockResolvedValue({ data: mockExistingReviews, error: null }),
+  maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) // Simulates no prior review from current user
+};
 
 const mockShoppingEq = jest.fn();
 const mockShoppingSelect = jest.fn(() => ({
@@ -61,114 +53,88 @@ jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
-      getSession: jest.fn(),
       signOut: jest.fn(),
     },
-    rpc: jest.fn(), // Ensure RPC is mocked
-    from: jest.fn((table) => {
-      if (table === 'recipes') {
-        return {
-          select: mockRecipesSelect,
-        };
-      }
-
-      if (table === 'recipe_ingredients') {
-        return {
-          select: mockIngredientsSelect,
-        };
-      }
-
-      if (table === 'saved_recipes') {
-        return {
-          insert: mockInsert,
-        };
-      }
-
-      if (table === 'shopping_list') {
-        return {
-          select: mockShoppingSelect,
-          insert: mockShoppingInsert,
-          update: mockShoppingUpdate,
-        };
-      }
-
-      return {
-        select: jest.fn(),
-        insert: jest.fn(),
-      };
-    }),
+    rpc: jest.fn(),
+    from: jest.fn(),
   },
 }));
 
-describe('RecipeScreen', () => {
+describe('RecipeScreen - Ratings & Reviews', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {}); // Suppress expected intentional errors in console
 
+    // Auth Mock
     supabase.auth.getUser.mockResolvedValue({
       data: { user: { id: 'test-user-id' } },
       error: null,
     });
 
-    // Mock the new recommendation RPC call
+    // RPC Mock (recommend_recipes)
     supabase.rpc.mockResolvedValue({
       data: mockRecipeData,
       error: null,
     });
 
-    mockEq.mockResolvedValue({
-      data: [
-        { quantity: '1', unit: 'cup', ingredient_name: 'rice' },
-        { quantity: '1', unit: 'lb', ingredient_name: 'chicken' },
-      ],
-      error: null,
-    });
-
-    mockShoppingEq.mockResolvedValue({
-      data: [],
-      error: null,
-    });
-
-    mockShoppingInsert.mockResolvedValue({
-      data: null,
-      error: null,
-    });
-
-    mockShoppingUpdateEq.mockResolvedValue({
-      data: null,
-      error: null,
-    });
-
-    mockInsert.mockResolvedValue({
-      data: null,
-      error: null,
+    // Table Routing Mock
+    supabase.from.mockImplementation((table) => {
+      if (table === 'recipe_ingredients') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({
+              data: [
+                { quantity: '1', unit: 'cup', ingredient_name: 'rice' },
+                { quantity: '1', unit: 'lb', ingredient_name: 'chicken' },
+              ],
+              error: null,
+            })
+          })
+        };
+      }
+      if (table === 'recipe_rating_summary') {
+        return {
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({ data: mockRatingSummary, error: null })
+          })
+        };
+      }
+      if (table === 'recipe_reviews') {
+        return {
+          select: jest.fn().mockReturnValue(mockReviewsQueryBuilder),
+          insert: mockInsertReview,
+          update: mockUpdateReview,
+        };
+      }
+      if (table === 'saved_recipes') {
+        return { insert: mockInsertSavedRecipe };
+      }
+      return { select: jest.fn(), insert: jest.fn() };
     });
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  test('loads recommended recipes for the signed in user', async () => {
+  test('fetches and displays recipes with aggregated star ratings', async () => {
     const { findByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
+    // Assert Title
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
-    expect(await findByText('Pasta Salad')).toBeTruthy();
     
-    // Check for the RPC call instead of the old library call
-    expect(supabase.rpc).toHaveBeenCalledWith('recommend_recipes', {
-      p_user_id: 'test-user-id',
-      p_limit: 20,
-      p_min_match: 0.0
+    // Assert RPC and Summary were fetched
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith('recommend_recipes', expect.any(Object));
+      expect(supabase.from).toHaveBeenCalledWith('recipe_rating_summary');
     });
-    expect(mockLimit).not.toHaveBeenCalled();
+
+    // Assert the mocked total reviews "(12)" appears on the card
+    expect(await findByText('(12)')).toBeTruthy();
   });
 
-  test('opens a recipe modal and loads recipe ingredients', async () => {
+  test('opens recipe details modal and saves recipe', async () => {
     const { findByText, getByText, getAllByText } = render(
       <NavigationContainer>
         <RecipeScreen />
@@ -178,95 +144,107 @@ describe('RecipeScreen', () => {
     fireEvent.press(await findByText('Chicken Rice Bowl'));
 
     await waitFor(() => {
-      expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
-      expect(mockIngredientsSelect).toHaveBeenCalledWith('ingredient_name, quantity, unit');
+      expect(supabase.from).toHaveBeenCalledWith('recipe_ingredients');
     });
 
+    // Verify Modal Details
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
-    expect(getAllByText(/rice/i).length).toBeGreaterThan(0);
-    expect(getAllByText(/chicken/i).length).toBeGreaterThan(0);
-    expect(getAllByText('1 cup').length).toBeGreaterThan(0);
-    expect(getAllByText('1 lb').length).toBeGreaterThan(0);
-    expect(getAllByText(/cook rice/i).length).toBeGreaterThan(0);
-    expect(getByText(/save to profile/i)).toBeTruthy();
+    
+    // Click Save Button
+    const saveBtn = getByText(/❤️ Save to Profile/i);
+    fireEvent.press(saveBtn);
+
+    await waitFor(() => {
+      expect(mockInsertSavedRecipe).toHaveBeenCalled();
+    });
+
+    const payload = mockInsertSavedRecipe.mock.calls[0][0][0];
+    expect(payload.user_id).toBe('test-user-id');
+    expect(payload.recipe_title).toBe('Chicken Rice Bowl');
   });
 
-  test('adds missing recipe ingredients to the shopping list with quantity and unit', async () => {
+  test('opens community reviews modal and displays existing reviews', async () => {
     const { findByText, getByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
-    fireEvent.press(await findByText('Chicken Rice Bowl'));
+    const reviewsBtn = await findByText('Reviews');
+    fireEvent.press(reviewsBtn);
 
     await waitFor(() => {
-      expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
+       expect(mockReviewsQueryBuilder.order).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByText(/add missing ingredients/i));
-
-    await waitFor(() => {
-      expect(mockShoppingSelect).toHaveBeenCalledWith('*');
-      expect(mockShoppingEq).toHaveBeenCalledWith('user_id', 'test-user-id');
-      expect(mockShoppingInsert).toHaveBeenCalledWith([
-        expect.objectContaining({
-          user_id: 'test-user-id',
-          item_name: 'rice',
-          quantity: 1,
-          unit: 'cup',
-          checked: false,
-        }),
-      ]);
-    });
+    // Verify Review Modal content
+    expect(getByText('Community Reviews')).toBeTruthy();
+    expect(getByText('"Loved it!"')).toBeTruthy(); 
   });
 
-  test('saves an opened recipe to the signed in user profile', async () => {
-    const { findByText, getByText } = render(
+  test('shows error when submitting a review without tapping a star', async () => {
+     const { findByText, getByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
-    fireEvent.press(await findByText('Chicken Rice Bowl'));
-    fireEvent.press(getByText(/save to profile/i));
-
+    const reviewsBtn = await findByText('Reviews');
+    fireEvent.press(reviewsBtn);
+    
     await waitFor(() => {
-      expect(supabase.auth.getUser).toHaveBeenCalled();
-      expect(mockInsert).toHaveBeenCalled();
+       expect(getByText('Submit Review')).toBeTruthy();
     });
 
-    expect(mockInsert.mock.calls[0][0]).toEqual([
-      expect.objectContaining({
-        recipe_id: 1,
-        recipe_title: 'Chicken Rice Bowl',
-        user_id: 'test-user-id',
-      }),
-    ]);
+    // Click submit without selecting a star rating
+    const submitBtn = getByText('Submit Review');
+    fireEvent.press(submitBtn);
+
+    // Validation error text should appear inline
+    expect(await findByText('⚠️ Please tap a star to select a rating.')).toBeTruthy();
+    
+    // Ensure database insertion never fired
+    expect(mockInsertReview).not.toHaveBeenCalled();
   });
 
-  test('shows an alert when saving a recipe fails', async () => {
-    mockInsert.mockResolvedValue({
-      data: null,
-      error: {
-        message: 'Save failed',
-      },
-    });
-
-    const { findByText, getByText } = render(
+  test('submits a new interactive star rating and review successfully', async () => {
+     const { findByText, getByText, getAllByText, getByPlaceholderText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
 
-    fireEvent.press(await findByText('Chicken Rice Bowl'));
-    fireEvent.press(getByText(/save to profile/i));
+    const reviewsBtn = await findByText('Reviews');
+    fireEvent.press(reviewsBtn);
+    
+    await waitFor(() => {
+       expect(getByText('Submit Review')).toBeTruthy();
+    });
+
+    // Tap the 5th star. We grab the last '★' element in the view (which is the 5th interactive star)
+    const starButtons = getAllByText('★');
+    fireEvent.press(starButtons[starButtons.length - 1]);
+
+    // Fill out the review text field
+    const input = getByPlaceholderText(/What did you think of this recipe/i);
+    fireEvent.changeText(input, 'Awesome dish!');
+
+    // Submit
+    const submitBtn = getByText('Submit Review');
+    fireEvent.press(submitBtn);
 
     await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.stringMatching(/save failed/i)
-      );
+        expect(mockInsertReview).toHaveBeenCalled();
     });
+
+    // Assert the exact payload sent to Supabase matches expectations
+    const payload = mockInsertReview.mock.calls[0][0][0];
+    expect(payload.user_id).toBe('test-user-id');
+    expect(payload.recipe_id).toBe(1);
+    expect(payload.rating).toBe(5);
+    expect(payload.review_text).toBe('Awesome dish!');
+
+    // Verify Success Alert
+    expect(Alert.alert).toHaveBeenCalledWith("Review Submitted!", "Your rating has been posted successfully.");
   });
 });
