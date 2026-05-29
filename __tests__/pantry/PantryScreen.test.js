@@ -359,8 +359,17 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText, getByTestId, findByPlaceholderText, getByPlaceholderText } = render(<PantryScreen />);
-
+    const {
+      findByText,
+      getByText,
+      getByTestId,
+      findByPlaceholderText,
+      getByPlaceholderText
+    } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
     fireEvent.press(getByText('List'));
@@ -410,8 +419,17 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText, getByTestId, findByPlaceholderText, getByPlaceholderText } = render(<PantryScreen />);
-
+    const {
+      findByText,
+      getByText,
+      getByTestId,
+      findByPlaceholderText,
+      getByPlaceholderText
+    } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
     fireEvent.press(getByText('List'));
@@ -462,8 +480,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText, getByTestId } = render(<PantryScreen />);
-
+    const { findByText, getByText, getByTestId } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
     fireEvent.press(getByText('List'));
@@ -499,8 +520,11 @@ describe('PantryScreen', () => {
       error: null,
     });
 
-    const { findByText, getByText } = render(<PantryScreen />);
-
+    const { findByText, getByText } = render(
+      <NavigationContainer>
+        <PantryScreen />
+      </NavigationContainer>
+    );
     expect(await findByText(/your pantry is empty/i)).toBeTruthy();
 
     fireEvent.press(getByText('List'));

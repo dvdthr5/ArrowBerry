@@ -95,7 +95,7 @@ export default function ScannerScreen() {
   const takePicture = async () => {
     if (!cameraRef.current) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.8 });
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
       setImageUri(photo.uri);
       setBase64Image(photo.base64);
       setScreen('preview');
