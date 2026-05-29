@@ -7,13 +7,12 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { supabase } from '../../lib/supabase';

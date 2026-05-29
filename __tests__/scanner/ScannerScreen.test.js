@@ -133,6 +133,5 @@ describe('ScannerScreen', () => {
       });
     });
 
-    expect(await findByText(/2\. analyze with llm/i)).toBeTruthy();
-  });
+    expect(await findByText(/tap ✓ to extract items/i)).toBeTruthy();  });
 });
