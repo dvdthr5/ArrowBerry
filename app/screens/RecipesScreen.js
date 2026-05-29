@@ -1,5 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Image,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
@@ -66,6 +80,24 @@ async function handleRecipePress(recipe){
   function handleCloseRecipeModal(){
     setSelectedRecipe(null);
     setSelectedRecipeIngredients([]);
+  }
+
+  async function handleOpenRecipeSource(recipe) {
+    const sourceUrl = recipe?.source;
+
+    if (!sourceUrl) {
+      Alert.alert('No Source Found', 'This recipe does not have a source link.');
+      return;
+    }
+
+    const canOpenUrl = await Linking.canOpenURL(sourceUrl);
+
+    if (!canOpenUrl) {
+      Alert.alert('Unable to Open Source', 'This recipe source link is not valid.');
+      return;
+    }
+
+    await Linking.openURL(sourceUrl);
   }
 
   async function handleSaveRecipe(recipe) {
@@ -312,6 +344,21 @@ async function fetchRecipes() {
                       disabled={sessionSavedIds[selectedRecipe.id]}
                       onPress={() => handleSaveRecipe(selectedRecipe)} 
                     />
+                    {!!selectedRecipe.missing_list?.length && (
+                      <Button
+                        title="Add Missing Ingredients to Shopping List"
+                        color="#2e7d32"
+                        onPress={() => handleAddMissingIngredients(selectedRecipe)}
+                      />
+                    )}
+                    {!!selectedRecipe.source && (
+                      <Pressable
+                        style={styles.sourceButton}
+                        onPress={() => handleOpenRecipeSource(selectedRecipe)}
+                      >
+                        <Text style={styles.sourceButtonText}>Go to Recipe Source</Text>
+                      </Pressable>
+                    )}
                   </View>
                 </>
               )}
@@ -428,6 +475,17 @@ const styles = StyleSheet.create({
   modalCloseButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  sourceButton: {
+    backgroundColor: '#111',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  sourceButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
   },
   recipeDetailsTitle: {
     fontSize: 20,

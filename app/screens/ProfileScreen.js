@@ -120,17 +120,82 @@ export default function ProfileScreen() {
     return instructions.replace(/\s*(\d+\.)\s/g, '\n$1 ').trim();
   }
 
-  const handlePasswordReset = async () => {
-    if (!email) return Alert.alert("Error", "No user email found.");
-    setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    setLoading(false);
-    
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      Alert.alert("Check your inbox", "Password reset link has been sent!");
+  const isValidEmailFormat = (value) => {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailPattern.test(value);
+  };
+
+  const handleChangeEmail = async () => {
+    if (!Alert.prompt) {
+      Alert.alert('Unsupported Action', 'Email changes require a supported prompt UI.');
+      return;
     }
+
+    Alert.prompt(
+      'Change Email',
+      'Enter your new email address.',
+      async (newEmail) => {
+        const trimmedEmail = newEmail?.trim().toLowerCase();
+
+        if (!trimmedEmail || !isValidEmailFormat(trimmedEmail)) {
+          Alert.alert('Error', 'Please enter a valid email address.');
+          return;
+        }
+
+        if (trimmedEmail === email) {
+          Alert.alert('No Change', 'This is already your current email address.');
+          return;
+        }
+
+        setLoading(true);
+        const { error } = await supabase.auth.updateUser({ email: trimmedEmail });
+        setLoading(false);
+
+        if (error) {
+          Alert.alert('Error', error.message);
+          return;
+        }
+
+        setEmail(trimmedEmail);
+        Alert.alert(
+          'Confirm New Email',
+          'Check your inbox to confirm this email change.'
+        );
+      },
+      'plain-text',
+      email,
+      'email-address'
+    );
+  };
+
+  const handleChangePassword = async () => {
+    if (!Alert.prompt) {
+      Alert.alert('Unsupported Action', 'Password changes require a supported prompt UI.');
+      return;
+    }
+
+    Alert.prompt(
+      'Change Password',
+      'Enter your new password.',
+      async (newPassword) => {
+        if (!newPassword || newPassword.length < 6) {
+          Alert.alert('Error', 'Password must be at least 6 characters.');
+          return;
+        }
+
+        setLoading(true);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        setLoading(false);
+
+        if (error) {
+          Alert.alert('Error', error.message);
+          return;
+        }
+
+        Alert.alert('Password Updated', 'Your password has been changed.');
+      },
+      'secure-text'
+    );
   };
 
   const handleSignOut = async () => {
@@ -185,7 +250,20 @@ export default function ProfileScreen() {
           
           <View style={styles.buttonRow}>
             <View style={styles.buttonWrapper}>
-              <Button title="Reset Password" onPress={handlePasswordReset} disabled={loading} color="#007bff" />
+              <Button
+                title="Change Email"
+                onPress={handleChangeEmail}
+                disabled={loading}
+                color="#007bff"
+              />
+            </View>
+            <View style={styles.buttonWrapper}>
+              <Button
+                title="Change Password"
+                onPress={handleChangePassword}
+                disabled={loading}
+                color="#007bff"
+              />
             </View>
             <View style={styles.buttonWrapper}>
               <Button title="Sign Out" onPress={handleSignOut} color="#dc3545" />
