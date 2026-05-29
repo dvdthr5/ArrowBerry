@@ -1,19 +1,17 @@
-import { useEffect, useState } from 'react';
-import { Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
-import {
-  Alert,
-  Button,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+import { useEffect, useState, useCallback } from 'react';
+import { 
+  Alert, 
+  Button, 
+  Image, 
+  Linking, 
+  Modal, 
+  Pressable, 
+  ScrollView, 
+  StyleSheet, 
+  Text, 
+  View 
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
