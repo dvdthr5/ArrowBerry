@@ -3,6 +3,9 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import RecipeScreen from '../../app/screens/RecipesScreen';
 import { supabase } from '../../lib/supabase';
+//adding the recipe reccs and random if its empty
+import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
+
 
 const mockRecipeData = [
   {
@@ -47,6 +50,12 @@ const mockIngredientsSelect = jest.fn(() => ({
 const mockInsert = jest.fn();
 const mockRpc = jest.fn(); // Added RPC mock
 
+//adding pantry items to work with the new fetchrecipes nikhil wrote
+const mockPantryCountEq = jest.fn();
+const mockPantryCountSelect = jest.fn(() => ({
+  eq: mockPantryCountEq,
+}));
+
 const mockShoppingEq = jest.fn();
 const mockShoppingSelect = jest.fn(() => ({
   eq: mockShoppingEq,
@@ -65,10 +74,17 @@ jest.mock('../../lib/supabase', () => ({
       signOut: jest.fn(),
     },
     rpc: jest.fn(), // Ensure RPC is mocked
+    // this part is not required because we use RPC for recommendations but I kept it IN CASE someone else is using it for their code
     from: jest.fn((table) => {
       if (table === 'recipes') {
         return {
           select: mockRecipesSelect,
+        };
+      }
+
+      if (table === 'pantry_items') {
+        return {
+          select: mockPantryCountSelect,
         };
       }
 
@@ -100,6 +116,12 @@ jest.mock('../../lib/supabase', () => ({
   },
 }));
 
+// added the mock for recommendations helper so fetchRecipes gets data
+jest.mock('../../lib/recommendations', () => ({
+  getRecipeRecommendations: jest.fn(),
+  getRandomRecipes: jest.fn(),
+}));
+
 describe('RecipeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -109,6 +131,29 @@ describe('RecipeScreen', () => {
       data: { user: { id: 'test-user-id' } },
       error: null,
     });
+
+    // Mock the new recommendation RPC call
+    supabase.rpc.mockResolvedValue({
+      data: mockRecipeData,
+      error: null,
+    });
+
+    // ADDED: mock getSession so fetchRecipes can get the user id
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'test-user-id' } } },
+      error: null,
+    });
+
+    // ADDED: mock pantry has items so recommendations path is taken
+    mockPantryCountEq.mockResolvedValue({
+      count: 5,
+      error: null,
+    });
+
+    // ADDED: mock getRecipeRecommendations to return test data
+    getRecipeRecommendations.mockResolvedValue(mockRecipeData);
+    getRandomRecipes.mockResolvedValue([]);
+
 
     // Mock the new recommendation RPC call
     supabase.rpc.mockResolvedValue({
@@ -159,14 +204,24 @@ describe('RecipeScreen', () => {
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
     
-    // Check for the RPC call instead of the old library call
+    /*// Check for the RPC call instead of the old library call
     expect(supabase.rpc).toHaveBeenCalledWith('recommend_recipes', {
       p_user_id: 'test-user-id',
       p_limit: 20,
       p_min_match: 0.0
     });
     expect(mockLimit).not.toHaveBeenCalled();
+  });*/
+  // the change is so that if we add extra parameters it wouldnt break the test
+      expect(getRecipeRecommendations).toHaveBeenCalledWith(
+      'test-user-id',
+      expect.objectContaining({
+        minMatch: 0.0,
+      })
+    );
+    expect(mockLimit).not.toHaveBeenCalled();
   });
+ 
 
   test('opens a recipe modal and loads recipe ingredients', async () => {
     const { findByText, getByText, getAllByText } = render(
@@ -179,7 +234,8 @@ describe('RecipeScreen', () => {
 
     await waitFor(() => {
       expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
-      expect(mockIngredientsSelect).toHaveBeenCalledWith('ingredient_name, quantity, unit');
+      //changed the order because the order of handleRecipePress goes in the quantity, unit, ingredient_name order
+      expect(mockIngredientsSelect).toHaveBeenCalledWith('quantity, unit, ingredient_name');
     });
 
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
