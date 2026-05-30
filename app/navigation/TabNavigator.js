@@ -30,6 +30,7 @@ export default function TabNavigator() {
         name="Scanner"
         component={ScannerScreen}
         options={{
+          headerShown: false,
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22 }}>📷</Text>,
         }}
       />
