@@ -218,7 +218,6 @@ export default function RecipesScreen() {
   }
 
   async function handleAddMissingIngredients(recipe) {
-<<<<<<< HEAD
     const { data: userData, error: authError } = await supabase.auth.getUser();
 
     if (authError || !userData?.user) {
@@ -260,11 +259,6 @@ export default function RecipesScreen() {
   }
 
   
-=======
-    Alert.alert('Coming soon', 'This feature is being built.');
-  }
-
->>>>>>> 3c1adff (merge conflict)
   async function handleOpenRecipeSource(recipe) {
     const sourceUrl = recipe?.source;
 
