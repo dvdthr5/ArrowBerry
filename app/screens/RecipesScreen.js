@@ -1,19 +1,18 @@
-import { useEffect, useState, useCallback } from 'react';
-import { 
-  Alert, 
-  Button, 
-  Image, 
-  Linking, 
-  Modal, 
-  Pressable, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  View 
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Image,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
-import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
 
 function RecipeCard({ recipe, onPress }) {
   return (
@@ -60,11 +59,18 @@ export default function RecipesScreen() {
 
 async function handleRecipePress(recipe){
     setSelectedRecipe(recipe);
+    const recipeId = recipe.id ?? recipe.recipe_id;
+
+    if (!recipeId) {
+      console.error('Recipe is missing an id:', recipe);
+      setSelectedRecipeIngredients([]);
+      return;
+    }
 
     const { data, error } = await supabase
       .from('recipe_ingredients')
       .select('quantity, unit, ingredient_name')
-      .eq('recipe_id', recipe.id);
+      .eq('recipe_id', recipeId);
 
     if (error) {
       console.error('Failed to fetch recipe ingredients', error.message);
@@ -109,10 +115,16 @@ async function handleRecipePress(recipe){
       return Alert.alert("Error", "You must be logged in to save recipes.");
     }
 
+    const recipeId = recipe.id ?? recipe.recipe_id;
+
+    if (!recipeId) {
+      return Alert.alert("Error", "This recipe is missing an id and cannot be saved.");
+    }
+
     const { error } = await supabase.from('saved_recipes').insert([
       { 
         user_id: userData.user.id, 
-        recipe_id: recipe.id,
+        recipe_id: recipeId,
         recipe_title: recipe.title 
       }
     ]);
@@ -184,7 +196,10 @@ async function fetchRecipes() {
       // Empty pantry — fetch random recipes
       setIsPantryEmpty(true);
       const results = await getRandomRecipes(20);
-      setRecipes(results);
+      setRecipes(results.map(recipe => ({
+        ...recipe,
+        id: recipe.id ?? recipe.recipe_id,
+      })));
     } else {
       // Has pantry items — use the recommendation algorithm
       setIsPantryEmpty(false);
@@ -192,7 +207,10 @@ async function fetchRecipes() {
         minMatch: 0.0,
         cuisine: selectedCuisine,
       });
-      setRecipes(results);
+      setRecipes(results.map(recipe => ({
+        ...recipe,
+        id: recipe.id ?? recipe.recipe_id,
+      })));
     }
   } catch (err) {
     console.error('Error fetching recipes:', err);
@@ -259,7 +277,7 @@ async function fetchRecipes() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {recipe.recipe_id}
+                  key = {recipe.id ?? recipe.recipe_id}
                   recipe = {recipe}
                   onPress = {handleRecipePress}
                 />
@@ -341,9 +359,9 @@ async function fetchRecipes() {
                   {/* FIXED: Save Button moved INSIDE the selectedRecipe check */}
                   <View style={{ marginTop: 15 }}>
                     <Button 
-                      title={sessionSavedIds[selectedRecipe.id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
-                      color={sessionSavedIds[selectedRecipe.id] ? "gray" : "#28a745"} 
-                      disabled={sessionSavedIds[selectedRecipe.id]}
+                      title={sessionSavedIds[selectedRecipe.id ?? selectedRecipe.recipe_id] ? "✅ Saved to Profile" : "❤️ Save to Profile"} 
+                      color={sessionSavedIds[selectedRecipe.id ?? selectedRecipe.recipe_id] ? "gray" : "#28a745"} 
+                      disabled={sessionSavedIds[selectedRecipe.id ?? selectedRecipe.recipe_id]}
                       onPress={() => handleSaveRecipe(selectedRecipe)} 
                     />
                     {!!selectedRecipe.missing_list?.length && (
