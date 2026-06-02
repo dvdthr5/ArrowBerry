@@ -349,7 +349,8 @@ describe('RecipeScreen', () => {
       </NavigationContainer>
     );
     // Verifies the 5-star summary mock injected from recipe_rating_summary view
-    expect(await findByText('⭐⭐⭐⭐⭐ (1)')).toBeTruthy();
+    // The component now uses text stars (★) instead of emojis
+    expect(await findByText('★★★★★')).toBeTruthy();
   });
 
   test('opens the reviews modal when clicking the Reviews button', async () => {
@@ -369,7 +370,7 @@ describe('RecipeScreen', () => {
     });
   });
 
-  test('shows an alert when trying to submit a review without a star rating', async () => {
+  test('shows an error message when trying to submit a review without a star rating', async () => {
     const { findAllByText, getByText } = render(
       <NavigationContainer>
         <RecipeScreen />
@@ -387,10 +388,8 @@ describe('RecipeScreen', () => {
     fireEvent.press(getByText('Submit Review'));
 
     await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith(
-        "Missing Rating",
-        "Please tap a star to select a rating before submitting."
-      );
+      // The component now renders an inline error instead of an Alert popup
+      expect(getByText("⚠️ Please tap a star to select a rating.")).toBeTruthy();
     });
   });
 });
