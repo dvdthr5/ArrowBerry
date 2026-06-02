@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Button,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View
-} from 'react-native';
+import { Alert, Button, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
-function RecipeCard({ recipe, onPress }) {
+function RecipeCard({ recipe, onPress, onReviewPress, averageRating, totalReviews }) {
+  const renderStars = (rating) => {
+    const stars = Math.round(rating || 0);
+    return '⭐'.repeat(stars) + '☆'.repeat(5 - stars);
+  };
+
   return (
     <Pressable style={styles.recipeCard} onPress={() => onPress(recipe)}>
-      <Text style={styles.recipeCardTitle}>{recipe.title}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+        <Text style={[styles.recipeCardTitle, { flex: 1, marginRight: 8 }]}>{recipe.title}</Text>
+        <Text style={{ fontSize: 14, fontWeight: '500', color: '#555' }}>
+          {renderStars(averageRating)} ({totalReviews || 0})
+        </Text>
+      </View>
+
       {recipe.total_ingredients > 0 && (
         <Text style={styles.recipeMatchBadge}>
           {Math.round(recipe.match_percentage * 100)}% match
@@ -33,12 +33,28 @@ function RecipeCard({ recipe, onPress }) {
           Missing: {recipe.missing_list.map(m => m.ingredient_name).join(', ')}
         </Text>
       )}
-      <Text style={styles.recipeCardHint}>Tap to view full recipe details</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+        <Text style={styles.recipeCardHint}>Tap to view full recipe details</Text>
+        <Pressable 
+          style={{ backgroundColor: '#007bff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }} 
+          onPress={() => onReviewPress(recipe)}
+        >
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Reviews</Text>
+        </Pressable>
+      </View>
     </Pressable>
   );
 }
-
 export default function RecipesScreen() {
+  // --- Reviews State ---
+  const [ratingsSummary, setRatingsSummary] = useState({});
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
+  const [reviewRecipe, setReviewRecipe] = useState(null);
+  const [activeRecipeReviews, setActiveRecipeReviews] = useState([]);
+  const [userRating, setUserRating] = useState(0);
+  const [userReviewText, setUserReviewText] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +70,74 @@ export default function RecipesScreen() {
 
     if (error){
       console.error('Logout failed', error.message);
+    }
+  }
+
+  async function handleOpenReviews(recipe) {
+    setReviewRecipe(recipe);
+    setReviewsModalVisible(true);
+    setUserRating(0);
+    setUserReviewText('');
+    
+    const targetRecipeId = recipe.id || recipe.recipe_id;
+
+    const { data, error } = await supabase
+      .from('recipe_reviews')
+      .select('*')
+      .eq('recipe_id', targetRecipeId)
+      .order('created_at', { ascending: false });
+
+    if (data) setActiveRecipeReviews(data);
+  }
+
+  async function submitReview() {
+    try {
+      if (userRating === 0) return Alert.alert("Missing Rating", "Please tap a star to select a rating before submitting.");
+      setSubmittingReview(true);
+      
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user) {
+        setSubmittingReview(false);
+        return Alert.alert("Session Expired", "You must be logged in to leave a review.");
+      }
+
+      const targetRecipeId = reviewRecipe?.id || reviewRecipe?.recipe_id;
+      const finalReviewText = userReviewText ? userReviewText.trim() : null;
+
+      const { data: existingReview } = await supabase
+        .from('recipe_reviews')
+        .select('id')
+        .eq('user_id', authData.user.id)
+        .eq('recipe_id', targetRecipeId)
+        .maybeSingle();
+
+      let dbError = null;
+
+      if (existingReview) {
+        const { error } = await supabase.from('recipe_reviews')
+          .update({ rating: userRating, review_text: finalReviewText })
+          .eq('id', existingReview.id);
+        dbError = error;
+      } else {
+        const { error } = await supabase.from('recipe_reviews')
+          .insert([{ user_id: authData.user.id, recipe_id: targetRecipeId, rating: userRating, review_text: finalReviewText }]);
+        dbError = error;
+      }
+
+      if (dbError) {
+        Alert.alert("Failed to submit review", dbError.message);
+      } else {
+        Alert.alert("Review Submitted!", "Your rating has been posted successfully.");
+        const { data: freshReviews } = await supabase.from('recipe_reviews')
+          .select('*').eq('recipe_id', targetRecipeId).order('created_at', { ascending: false });
+        if (freshReviews) setActiveRecipeReviews(freshReviews);
+        setUserRating(0); setUserReviewText('');
+        fetchRecipes(); 
+      }
+    } catch (err) {
+      Alert.alert("Unexpected Error", "Something went wrong in the app.");
+    } finally {
+      setSubmittingReview(false);
     }
   }
 
@@ -126,6 +210,8 @@ async function handleRecipePress(recipe){
       `${shoppingListItems.length} missing ingredient${shoppingListItems.length === 1 ? '' : 's'} added to your shopping list.`
     );
   }
+
+  
   async function handleOpenRecipeSource(recipe) {
     const sourceUrl = recipe?.source;
 
@@ -232,10 +318,21 @@ async function fetchRecipes() {
       // Empty pantry — fetch random recipes
       setIsPantryEmpty(true);
       const results = await getRandomRecipes(20);
-      setRecipes(results.map(recipe => ({
-        ...recipe,
-        id: recipe.id ?? recipe.recipe_id,
-      })));
+      setRecipes(results);
+      // Fetch rating summaries
+      const recipeIds = results.map(r => r.id || r.recipe_id);
+      if (recipeIds.length > 0) {
+        const { data: summaryData } = await supabase
+          .from('recipe_rating_summary')
+          .select('*')
+          .in('recipe_id', recipeIds);
+
+        if (summaryData) {
+          const summaryMap = {};
+          summaryData.forEach(s => { summaryMap[s.recipe_id] = s; });
+          setRatingsSummary(summaryMap);
+        }
+      }
     } else {
       // Has pantry items — use the recommendation algorithm
       setIsPantryEmpty(false);
@@ -243,10 +340,21 @@ async function fetchRecipes() {
         minMatch: 0.0,
         cuisine: selectedCuisine,
       });
-      setRecipes(results.map(recipe => ({
-        ...recipe,
-        id: recipe.id ?? recipe.recipe_id,
-      })));
+      setRecipes(results);
+      // Fetch rating summaries
+      const recipeIds = results.map(r => r.id || r.recipe_id);
+      if (recipeIds.length > 0) {
+        const { data: summaryData } = await supabase
+          .from('recipe_rating_summary')
+          .select('*')
+          .in('recipe_id', recipeIds);
+
+        if (summaryData) {
+          const summaryMap = {};
+          summaryData.forEach(s => { summaryMap[s.recipe_id] = s; });
+          setRatingsSummary(summaryMap);
+        }
+      }
     }
   } catch (err) {
     console.error('Error fetching recipes:', err);
@@ -313,9 +421,12 @@ async function fetchRecipes() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key = {recipe.id ?? recipe.recipe_id}
-                  recipe = {recipe}
-                  onPress = {handleRecipePress}
+                  key={recipe.id || recipe.recipe_id}
+                  recipe={recipe}
+                  onPress={handleRecipePress}
+                  onReviewPress={handleOpenReviews}
+                  averageRating={ratingsSummary[recipe.id || recipe.recipe_id]?.average_rating || 0}
+                  totalReviews={ratingsSummary[recipe.id || recipe.recipe_id]?.total_reviews || 0}
                 />
               ))}
             </View>
@@ -420,8 +531,57 @@ async function fetchRecipes() {
               )}
             </View>
           </View>
-        </Modal>
-          
+        </Modal>  
+        <Modal visible={reviewsModalVisible} transparent={true} animationType='slide' onRequestClose={() => setReviewsModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setReviewsModalVisible(false)} />
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            {reviewRecipe && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.recipeDetailsTitle}>Reviews</Text>
+                  <Pressable style={styles.modalCloseButton} onPress={() => setReviewsModalVisible(false)}>
+                    <Text style={styles.modalCloseButtonText}>Close</Text>
+                  </Pressable>
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{reviewRecipe.title}</Text>
+
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {activeRecipeReviews.length > 0 ? (
+                    activeRecipeReviews.map(r => (
+                      <View key={r.id} style={{ backgroundColor: '#e9ecef', padding: 12, borderRadius: 12, marginBottom: 10 }}>
+                        <Text style={{ fontSize: 16, marginBottom: 4 }}>{'⭐'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</Text>
+                        {r.review_text ? <Text style={{ fontSize: 14, color: '#333', fontStyle: 'italic' }}>"{r.review_text}"</Text> : null}
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={{ fontStyle: 'italic', color: '#666', marginBottom: 20 }}>No reviews yet. Be the first!</Text>
+                  )}
+
+                  <View style={{ marginTop: 20, borderTopWidth: 1, borderColor: '#aaa', paddingTop: 20, paddingBottom: 20 }}>
+                    <Text style={styles.recipeDetailsTitle}>Leave a Review</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16, justifyContent: 'center' }}>
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <TouchableOpacity key={star} onPress={() => setUserRating(star)} activeOpacity={0.6}>
+                          <Text style={{ fontSize: 36, color: star <= userRating ? '#f5a623' : '#ccc' }}>★</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TextInput 
+                      style={{ backgroundColor: '#fff', borderRadius: 8, padding: 12, minHeight: 80, textAlignVertical: 'top', marginBottom: 16, borderWidth: 1, borderColor: '#999' }}
+                      placeholder="What did you think of this recipe? (Optional)"
+                      multiline
+                      value={userReviewText}
+                      onChangeText={setUserReviewText}
+                    />
+                    <Button title={submittingReview ? "Submitting..." : "Submit Review"} onPress={submitReview} disabled={submittingReview} color="#007bff" />
+                  </View>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 } 
