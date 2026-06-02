@@ -87,9 +87,45 @@ async function handleRecipePress(recipe){
   }
 
   async function handleAddMissingIngredients(recipe) {
-  // TODO: integrate with shopping list feature once it's built
-  Alert.alert('Coming soon', 'This feature is being built.');
-}
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !userData?.user) {
+      return Alert.alert('Error', 'You must be logged in to add items to your shopping list.');
+    }
+
+    const missingIngredients = recipe?.missing_list || [];
+
+    if (!missingIngredients.length) {
+      return Alert.alert('No Missing Ingredients', 'This recipe does not have any missing ingredients to add.');
+    }
+
+    const shoppingListItems = missingIngredients
+      .map((ingredient) => ({
+        user_id: userData.user.id,
+        item_name: ingredient.ingredient_name ?? ingredient.item_name ?? ingredient.name,
+        quantity: ingredient.quantity ?? null,
+        unit: ingredient.unit ?? null,
+      }))
+      .filter((ingredient) => ingredient.item_name);
+
+    if (!shoppingListItems.length) {
+      return Alert.alert('Error', 'No valid missing ingredients were found for this recipe.');
+    }
+
+    const { error } = await supabase
+      .from('shopping_list')
+      .insert(shoppingListItems);
+
+    if (error) {
+      console.error('Failed to add missing ingredients to shopping list:', error.message);
+      return Alert.alert('Failed to Add Ingredients', error.message);
+    }
+
+    Alert.alert(
+      'Shopping List Updated',
+      `${shoppingListItems.length} missing ingredient${shoppingListItems.length === 1 ? '' : 's'} added to your shopping list.`
+    );
+  }
   async function handleOpenRecipeSource(recipe) {
     const sourceUrl = recipe?.source;
 
