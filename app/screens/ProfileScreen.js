@@ -314,17 +314,17 @@ export default function ProfileScreen() {
                     {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
                   </Text>
                   {review.review_text ? (
-                    <Text style={{ fontSize: 14, color: '#555', fontStyle: 'italic' }}>"{review.review_text}"</Text>
+                    <Text style={{ fontSize: 14, color: '#555', fontStyle: 'italic' }}>&quot;{review.review_text}&quot;</Text>
                   ) : null}
                 </View>
               </View>
             ))
           ) : (
-            <Text style={styles.emptyText}>You haven't reviewed any recipes yet.</Text>
+            <Text style={styles.emptyText}>You haven&apos;t reviewed any recipes yet.</Text>
           )}
         </View>
 
-        
+
         {/* --- Dietary Restrictions --- */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Dietary Restrictions</Text>

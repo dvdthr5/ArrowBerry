@@ -99,7 +99,7 @@ export default function RecipesScreen() {
     
     const targetRecipeId = recipe.id || recipe.recipe_id;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('recipe_reviews')
       .select('*')
       .eq('recipe_id', targetRecipeId)
@@ -330,6 +330,7 @@ export default function RecipesScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchRecipes();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCuisine])
   );
 
@@ -568,7 +569,7 @@ export default function RecipesScreen() {
                           <Text style={{ color: '#FFB800' }}>{'★'.repeat(r.rating || 0)}</Text>
                           <Text style={{ color: '#a0a0a0' }}>{'★'.repeat(5 - (r.rating || 0))}</Text>
                         </Text>
-                        <Text style={styles.reviewBodyText}>"{r.review_text}"</Text>
+                        <Text style={styles.reviewBodyText}>&quot;{r.review_text}&quot;</Text>
                       </View>
                     ))
                   ) : (
