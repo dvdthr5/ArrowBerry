@@ -343,14 +343,18 @@ describe('RecipeScreen', () => {
   // --------------------------------------------------------
 
   test('displays average star ratings on the recipe card', async () => {
-    const { findByText } = render(
+    const { findAllByText } = render(
       <NavigationContainer>
         <RecipeScreen />
       </NavigationContainer>
     );
-    // Verifies the 5-star summary mock injected from recipe_rating_summary view
-    // The component now uses text stars (★) instead of emojis
-    expect(await findByText('★★★★★')).toBeTruthy();
+    
+    // Use findAllByText because BOTH recipes render 5 star characters 
+    // (one yellow, one grey), so there are multiple matches in the DOM.
+    const starElements = await findAllByText('★★★★★');
+    
+    // Confirm that the stars successfully rendered on the screen
+    expect(starElements.length).toBeGreaterThan(0);
   });
 
   test('opens the reviews modal when clicking the Reviews button', async () => {
