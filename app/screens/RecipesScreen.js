@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
 import { Alert, Button, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
@@ -295,9 +296,12 @@ async function handleRecipePress(recipe){
     return uniqueLines.join('\n');
   }
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
       fetchRecipes(); 
-    }, [selectedCuisine]);
+    }, [selectedCuisine])
+  );
+
 //pushing the new file for debugging 2
 //doing this again ignore
 async function fetchRecipes() {
