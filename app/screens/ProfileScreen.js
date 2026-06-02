@@ -32,6 +32,19 @@ export default function ProfileScreen() {
         if (authData?.user) {
           setEmail(authData.user.email);
           
+          // Fetch saved recipes
+          const { data: savedData, error: savedError } = await supabase
+            .from('saved_recipes')
+            .select('*')
+            .eq('user_id', authData.user.id)
+            .order('created_at', { ascending: false });
+
+          if (savedData) {
+            setSavedRecipes(savedData);
+          } else if (savedError) {
+            console.error("Error fetching saved recipes:", savedError.message);
+          }
+
           // Fetch the user's past reviews
           const { data: reviewsData } = await supabase
             .from('recipe_reviews')
@@ -41,7 +54,7 @@ export default function ProfileScreen() {
 
           if (reviewsData) setMyReviews(reviewsData);
 
-          // 2. NEW: Fetch dietary preferences and update the switches
+          // Fetch dietary preferences and update the switches
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
@@ -67,7 +80,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // --- NEW: Handle opening the saved recipe modal ---
+  // --- Handle opening the saved recipe modal ---
   async function handleRecipePress(savedRecipeItem) {
     // 1. Fetch the full recipe details using the saved recipe_id
     const { data: recipeData, error: recipeError } = await supabase
