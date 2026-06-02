@@ -305,66 +305,63 @@ async function handleRecipePress(recipe){
 //pushing the new file for debugging 2
 //doing this again ignore
 async function fetchRecipes() {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        setLoading(false);
+        return;
+      }
+
+      // Check if pantry is empty first
+      const { count } = await supabase
+        .from('pantry_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id);
+
+      let fetchedRecipes = [];
+
+      if (!count || count === 0) {
+        // Empty pantry — fetch random recipes
+        setIsPantryEmpty(true);
+        const results = await getRandomRecipes(20);
+        fetchedRecipes = results.map(recipe => ({
+          ...recipe,
+          id: recipe.id ?? recipe.recipe_id,
+        }));
+      } else {
+        // Has pantry items — use the recommendation algorithm
+        setIsPantryEmpty(false);
+        const results = await getRecipeRecommendations(session.user.id, {
+          minMatch: 0.0,
+          cuisine: selectedCuisine,
+        });
+        fetchedRecipes = results.map(recipe => ({
+          ...recipe,
+          id: recipe.id ?? recipe.recipe_id,
+        }));
+      }
+
+      setRecipes(fetchedRecipes);
+
+      const recipeIds = fetchedRecipes.map(r => r.id);
+      if (recipeIds.length > 0) {
+        const { data: summaryData } = await supabase
+          .from('recipe_rating_summary')
+          .select('*')
+          .in('recipe_id', recipeIds);
+
+        if (summaryData) {
+          const summaryMap = {};
+          summaryData.forEach(s => { summaryMap[s.recipe_id] = s; });
+          setRatingsSummary(summaryMap);
+        }
+      }
+
+    } catch (err) {
+      console.error('Error fetching recipes:', err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Check if pantry is empty first
-    const { count } = await supabase
-      .from('pantry_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', session.user.id);
-
-    if (!count || count === 0) {
-      // Empty pantry — fetch random recipes
-      setIsPantryEmpty(true);
-      const results = await getRandomRecipes(20);
-      setRecipes(results);
-      // Fetch rating summaries
-      const recipeIds = results.map(r => r.id || r.recipe_id);
-      if (recipeIds.length > 0) {
-        const { data: summaryData } = await supabase
-          .from('recipe_rating_summary')
-          .select('*')
-          .in('recipe_id', recipeIds);
-
-        if (summaryData) {
-          const summaryMap = {};
-          summaryData.forEach(s => { summaryMap[s.recipe_id] = s; });
-          setRatingsSummary(summaryMap);
-        }
-      }
-    } else {
-      // Has pantry items — use the recommendation algorithm
-      setIsPantryEmpty(false);
-      const results = await getRecipeRecommendations(session.user.id, {
-        minMatch: 0.0,
-        cuisine: selectedCuisine,
-      });
-      setRecipes(results);
-      // Fetch rating summaries
-      const recipeIds = results.map(r => r.id || r.recipe_id);
-      if (recipeIds.length > 0) {
-        const { data: summaryData } = await supabase
-          .from('recipe_rating_summary')
-          .select('*')
-          .in('recipe_id', recipeIds);
-
-        if (summaryData) {
-          const summaryMap = {};
-          summaryData.forEach(s => { summaryMap[s.recipe_id] = s; });
-          setRatingsSummary(summaryMap);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error fetching recipes:', err);
-  } finally {
-    setLoading(false);
-  }
 }
 
   return (
@@ -425,12 +422,12 @@ async function fetchRecipes() {
             <View style={styles.recipeList}>
               {recipes.map((recipe) => (
                 <RecipeCard
-                  key={recipe.id || recipe.recipe_id}
+                  key={recipe.id ?? recipe.recipe_id}
                   recipe={recipe}
                   onPress={handleRecipePress}
                   onReviewPress={handleOpenReviews}
-                  averageRating={ratingsSummary[recipe.id || recipe.recipe_id]?.average_rating || 0}
-                  totalReviews={ratingsSummary[recipe.id || recipe.recipe_id]?.total_reviews || 0}
+                  averageRating={ratingsSummary[recipe.id ?? recipe.recipe_id]?.average_rating || 0}
+                  totalReviews={ratingsSummary[recipe.id ?? recipe.recipe_id]?.total_reviews || 0}
                 />
               ))}
             </View>

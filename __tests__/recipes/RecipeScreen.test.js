@@ -4,8 +4,7 @@ import { Alert } from 'react-native';
 import RecipeScreen from '../../app/screens/RecipesScreen';
 import { supabase } from '../../lib/supabase';
 //adding the recipe reccs and random if its empty
-import { getRecipeRecommendations, getRandomRecipes } from '../../lib/recommendations';
-
+import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 
 const mockRecipeData = [
   {
@@ -48,7 +47,7 @@ const mockIngredientsSelect = jest.fn(() => ({
   eq: mockEq,
 }));
 const mockInsert = jest.fn();
-const mockRpc = jest.fn(); // Added RPC mock
+const mockRpc = jest.fn(); 
 
 //adding pantry items to work with the new fetchrecipes nikhil wrote
 const mockPantryCountEq = jest.fn();
@@ -66,6 +65,25 @@ const mockShoppingUpdate = jest.fn(() => ({
   eq: mockShoppingUpdateEq,
 }));
 
+// --- NEW: Review & Rating Mocks ---
+const mockOrder = jest.fn();
+const mockMaybeSingle = jest.fn();
+const mockIn = jest.fn();
+
+const mockReviewsSelect = jest.fn(() => {
+  const chain = {
+    eq: jest.fn(() => chain),
+    order: mockOrder,
+    maybeSingle: mockMaybeSingle,
+  };
+  return chain;
+});
+
+const mockSummarySelect = jest.fn(() => ({
+  in: mockIn,
+}));
+// ----------------------------------
+
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
@@ -73,39 +91,37 @@ jest.mock('../../lib/supabase', () => ({
       getSession: jest.fn(),
       signOut: jest.fn(),
     },
-    rpc: jest.fn(), // Ensure RPC is mocked
-    // this part is not required because we use RPC for recommendations but I kept it IN CASE someone else is using it for their code
+    rpc: jest.fn(), 
     from: jest.fn((table) => {
       if (table === 'recipes') {
-        return {
-          select: mockRecipesSelect,
-        };
+        return { select: mockRecipesSelect };
       }
-
       if (table === 'pantry_items') {
-        return {
-          select: mockPantryCountSelect,
-        };
+        return { select: mockPantryCountSelect };
       }
-
       if (table === 'recipe_ingredients') {
-        return {
-          select: mockIngredientsSelect,
-        };
+        return { select: mockIngredientsSelect };
       }
-
       if (table === 'saved_recipes') {
-        return {
-          insert: mockInsert,
-        };
+        return { insert: mockInsert };
       }
-
       if (table === 'shopping_list') {
         return {
           select: mockShoppingSelect,
           insert: mockShoppingInsert,
           update: mockShoppingUpdate,
         };
+      }
+      // NEW: Mocking the review tables
+      if (table === 'recipe_reviews') {
+        return {
+          select: mockReviewsSelect,
+          insert: mockInsert,
+          update: mockInsert,
+        };
+      }
+      if (table === 'recipe_rating_summary') {
+        return { select: mockSummarySelect };
       }
 
       return {
@@ -132,34 +148,23 @@ describe('RecipeScreen', () => {
       error: null,
     });
 
-    // Mock the new recommendation RPC call
     supabase.rpc.mockResolvedValue({
       data: mockRecipeData,
       error: null,
     });
 
-    // ADDED: mock getSession so fetchRecipes can get the user id
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: 'test-user-id' } } },
       error: null,
     });
 
-    // ADDED: mock pantry has items so recommendations path is taken
     mockPantryCountEq.mockResolvedValue({
       count: 5,
       error: null,
     });
 
-    // ADDED: mock getRecipeRecommendations to return test data
     getRecipeRecommendations.mockResolvedValue(mockRecipeData);
     getRandomRecipes.mockResolvedValue([]);
-
-
-    // Mock the new recommendation RPC call
-    supabase.rpc.mockResolvedValue({
-      data: mockRecipeData,
-      error: null,
-    });
 
     mockEq.mockResolvedValue({
       data: [
@@ -188,6 +193,23 @@ describe('RecipeScreen', () => {
       data: null,
       error: null,
     });
+
+    // --- NEW: Default values for review mocks ---
+    mockIn.mockResolvedValue({
+      data: [{ recipe_id: 1, average_rating: 5, total_reviews: 1 }],
+      error: null,
+    });
+
+    mockOrder.mockResolvedValue({
+      data: [{ id: 1, rating: 5, review_text: 'Delicious!' }],
+      error: null,
+    });
+
+    mockMaybeSingle.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+    // --------------------------------------------
   });
 
   afterEach(() => {
@@ -204,16 +226,7 @@ describe('RecipeScreen', () => {
     expect(await findByText('Chicken Rice Bowl')).toBeTruthy();
     expect(await findByText('Pasta Salad')).toBeTruthy();
     
-    /*// Check for the RPC call instead of the old library call
-    expect(supabase.rpc).toHaveBeenCalledWith('recommend_recipes', {
-      p_user_id: 'test-user-id',
-      p_limit: 20,
-      p_min_match: 0.0
-    });
-    expect(mockLimit).not.toHaveBeenCalled();
-  });*/
-  // the change is so that if we add extra parameters it wouldnt break the test
-      expect(getRecipeRecommendations).toHaveBeenCalledWith(
+    expect(getRecipeRecommendations).toHaveBeenCalledWith(
       'test-user-id',
       expect.objectContaining({
         minMatch: 0.0,
@@ -221,7 +234,6 @@ describe('RecipeScreen', () => {
     );
     expect(mockLimit).not.toHaveBeenCalled();
   });
- 
 
   test('opens a recipe modal and loads recipe ingredients', async () => {
     const { findByText, getByText, getAllByText } = render(
@@ -234,19 +246,18 @@ describe('RecipeScreen', () => {
 
     await waitFor(() => {
       expect(mockEq).toHaveBeenCalledWith('recipe_id', 1);
-      //changed the order because the order of handleRecipePress goes in the quantity, unit, ingredient_name order
       expect(mockIngredientsSelect).toHaveBeenCalledWith('quantity, unit, ingredient_name');
     });
 
     expect(getAllByText(/simple chicken and rice recipe/i).length).toBeGreaterThan(0);
     expect(getAllByText(/rice/i).length).toBeGreaterThan(0);
     expect(getAllByText(/chicken/i).length).toBeGreaterThan(0);
-    // changing from '1 cup' to this because it was too specific and was not passing tests
     expect(getAllByText(/1 cup rice/i).length).toBeGreaterThan(0);
     expect(getAllByText(/1 lb chicken/i).length).toBeGreaterThan(0);
     expect(getAllByText(/cook rice/i).length).toBeGreaterThan(0);
     expect(getByText(/save to profile/i)).toBeTruthy();
   });
+
   // TODO: un-skip once handleAddMissingIngredients is fully implemented with shopping_list integration
   test.skip('adds missing recipe ingredients to the shopping list with quantity and unit', async () => {
     const { findByText, getByText } = render(
@@ -323,6 +334,62 @@ describe('RecipeScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringMatching(/save failed/i)
+      );
+    });
+  });
+
+  // --------------------------------------------------------
+  // --- NEW REVIEW FEATURE TESTS ---
+  // --------------------------------------------------------
+
+  test('displays average star ratings on the recipe card', async () => {
+    const { findByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
+    // Verifies the 5-star summary mock injected from recipe_rating_summary view
+    expect(await findByText('⭐⭐⭐⭐⭐ (1)')).toBeTruthy();
+  });
+
+  test('opens the reviews modal when clicking the Reviews button', async () => {
+    const { findAllByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
+    
+    // There are multiple "Reviews" buttons (one per card), so we click the first one
+    const reviewButtons = await findAllByText('Reviews');
+    fireEvent.press(reviewButtons[0]);
+
+    await waitFor(() => {
+      expect(getByText('Leave a Review')).toBeTruthy();
+      expect(getByText('"Delicious!"')).toBeTruthy(); // Checks if the mocked review is displayed
+    });
+  });
+
+  test('shows an alert when trying to submit a review without a star rating', async () => {
+    const { findAllByText, getByText } = render(
+      <NavigationContainer>
+        <RecipeScreen />
+      </NavigationContainer>
+    );
+    
+    const reviewButtons = await findAllByText('Reviews');
+    fireEvent.press(reviewButtons[0]);
+
+    await waitFor(() => {
+      expect(getByText('Submit Review')).toBeTruthy();
+    });
+
+    // Click submit without selecting any stars
+    fireEvent.press(getByText('Submit Review'));
+
+    await waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith(
+        "Missing Rating",
+        "Please tap a star to select a rating before submitting."
       );
     });
   });
