@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
-import { Alert, Button, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Button, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
@@ -535,14 +535,9 @@ export default function RecipesScreen() {
       <Modal visible={reviewsModalVisible} transparent={true} animationType='slide' onRequestClose={() => setReviewsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} onPress={() => setReviewsModalVisible(false)} activeOpacity={1} />
-          {/* Add flexShrink: 1 so iOS doesn't push the bottom off the screen */}
-          <View style={[styles.modalCard, { maxHeight: '90%', flexShrink: 1 }]}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
             {reviewRecipe && (
-              /* Add KeyboardAvoidingView so the keyboard doesn't cover the text input */
-              <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-                style={{ flex: 1 }}
-              >
+              <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.recipeDetailsTitle}>Community Reviews</Text>
                   <TouchableOpacity style={styles.modalCloseButton} onPress={() => setReviewsModalVisible(false)}>
@@ -560,13 +555,7 @@ export default function RecipesScreen() {
                   </View>
                 </View>
 
-                {/* Add contentContainerStyle paddingBottom so the button is fully reachable */}
-                <ScrollView 
-                  style={{ flex: 1 }} 
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                  showsVerticalScrollIndicator={false} 
-                  keyboardShouldPersistTaps="always"
-                >
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="always">
                   {textReviews.length > 0 ? (
                     textReviews.map(r => (
                       <View key={r.id} style={styles.reviewBubble}>
@@ -624,7 +613,7 @@ export default function RecipesScreen() {
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
-              </KeyboardAvoidingView>
+              </>
             )}
           </View>
         </View>
