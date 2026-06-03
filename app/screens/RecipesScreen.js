@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
-import { Alert, Button, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getRandomRecipes, getRecipeRecommendations } from '../../lib/recommendations';
 import { supabase } from '../../lib/supabase';
 
@@ -501,28 +501,36 @@ export default function RecipesScreen() {
                   )}
                 </ScrollView>
 
-                <View style={{ marginTop: 15 }}>
-                  <TouchableOpacity 
-                    style={[styles.saveProfileBtn, sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id] && styles.saveProfileBtnDisabled]}
+                <View style={styles.recipeActionButtonGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.recipeActionButton,
+                      sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id] && styles.recipeActionButtonDisabled
+                    ]}
                     disabled={sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id]}
                     onPress={() => handleSaveRecipe(selectedRecipe)}
                   >
-                    <Text style={styles.saveProfileBtnText}>
+                    <Text style={styles.recipeActionButtonText}>
                       {sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id] ? "Saved to Profile" : "Save to Profile"}
                     </Text>
                   </TouchableOpacity>
 
                   {!!selectedRecipe.missing_list?.length && (
-                    <Button
-                      title="Add Missing Ingredients to Shopping List"
-                      color="#2e7d32"
+                    <TouchableOpacity
+                      style={styles.recipeActionButton}
                       onPress={() => handleAddMissingIngredients(selectedRecipe)}
-                    />
+                    >
+                      <Text style={styles.recipeActionButtonText}>Add Missing Ingredients to Shopping List</Text>
+                    </TouchableOpacity>
                   )}
+
                   {!!selectedRecipe.source && (
-                    <Pressable style={styles.sourceButton} onPress={() => handleOpenRecipeSource(selectedRecipe)}>
-                      <Text style={styles.sourceButtonText}>Go to Recipe Source</Text>
-                    </Pressable>
+                    <TouchableOpacity
+                      style={styles.recipeActionButton}
+                      onPress={() => handleOpenRecipeSource(selectedRecipe)}
+                    >
+                      <Text style={styles.recipeActionButtonText}>Go to Recipe Source</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               </>
@@ -651,11 +659,10 @@ const styles = StyleSheet.create({
   ingredientsSection: { marginBottom: 12 },
   recipeDetailsTitle: { fontSize: 20, fontWeight: '700', marginBottom: 10 },
   recipeDetailsText: { fontSize: 14, lineHeight: 20, marginBottom: 8 },
-  saveProfileBtn: { backgroundColor: '#28a745', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 10 },
-  saveProfileBtnDisabled: { backgroundColor: 'gray' },
-  saveProfileBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  sourceButton: { backgroundColor: '#111', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 10 },
-  sourceButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  recipeActionButtonGroup: { marginTop: 15, gap: 10 },
+  recipeActionButton: { backgroundColor: '#2e7d32', borderWidth: 1, borderColor: '#1b5e20', padding: 12, borderRadius: 8, alignItems: 'center' },
+  recipeActionButtonDisabled: { backgroundColor: 'gray', borderColor: '#666' },
+  recipeActionButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16, textAlign: 'center' },
   cuisineRow: { gap: 8, paddingVertical: 8, marginBottom: 4 },
   cuisineChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f0f0f0', borderWidth: 1, borderColor: '#e0e0e0' },
   cuisineChipActive: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
