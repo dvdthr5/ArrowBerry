@@ -508,7 +508,7 @@ export default function RecipesScreen() {
                     onPress={() => handleSaveRecipe(selectedRecipe)}
                   >
                     <Text style={styles.saveProfileBtnText}>
-                      {sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id] ? "✅ Saved to Profile" : "❤️ Save to Profile"}
+                      {sessionSavedIds[selectedRecipe.id || selectedRecipe.recipe_id] ? "Saved to Profile" : "Save to Profile"}
                     </Text>
                   </TouchableOpacity>
 
